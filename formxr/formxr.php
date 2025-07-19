@@ -278,7 +278,7 @@ class FormXR {
     }
     
     public function admin_page() {
-        include FORMXR_PLUGIN_PATH . 'templates/admin-main.php';
+        $this->render_admin_page('admin-main');
     }
     
     public function questionnaires_page() {
@@ -286,43 +286,64 @@ class FormXR {
         if (isset($_GET['action'])) {
             switch ($_GET['action']) {
                 case 'new':
-                    include FORMXR_PLUGIN_PATH . 'templates/admin-questionnaire-new.php';
+                    $this->render_admin_page('admin-questionnaire-new');
                     return;
                 case 'edit':
-                    include FORMXR_PLUGIN_PATH . 'templates/admin-questionnaire-edit.php';
+                    $this->render_admin_page('admin-questionnaire-edit');
                     return;
                 case 'builder':
-                    include FORMXR_PLUGIN_PATH . 'templates/admin-questionnaire-builder.php';
+                    $this->render_admin_page('admin-questionnaire-builder');
                     return;
             }
         }
-        include FORMXR_PLUGIN_PATH . 'templates/admin-questionnaires.php';
+        $this->render_admin_page('admin-questionnaires');
     }
     
     public function settings_page() {
-        include FORMXR_PLUGIN_PATH . 'templates/admin-settings.php';
+        $this->render_admin_page('admin-settings');
     }
     
     public function submissions_page() {
-        include FORMXR_PLUGIN_PATH . 'templates/admin-submissions.php';
+        $this->render_admin_page('admin-submissions');
     }
     
     public function analytics_page() {
+        $this->render_admin_page('admin-analytics');
+    }
+    
+    /**
+     * Render admin page with header and footer
+     */
+    private function render_admin_page($template) {
+        ?>
+        <div class="formxr-admin-page">
+            <div class="formxr-admin-wrapper">
+                <?php include FORMXR_PLUGIN_PATH . 'templates/admin-header.php'; ?>
+                
+                <div class="formxr-admin-content">
+                    <?php include FORMXR_PLUGIN_PATH . 'templates/' . $template . '.php'; ?>
+                </div>
+                
+                <?php include FORMXR_PLUGIN_PATH . 'templates/admin-footer.php'; ?>
+            </div>
+        </div>
+        <?php
+    }
         include FORMXR_PLUGIN_PATH . 'templates/admin-analytics.php';
     }
     
     public function enqueue_frontend_scripts() {
-        wp_enqueue_script('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/js/frontend.js', array('jquery'), FORMXR_VERSION, true);
-        // Legacy CSS disabled - new frontend template has embedded CSS
-        // wp_enqueue_style('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/css/frontend.css', array(), FORMXR_VERSION);
+        // Enqueue improved frontend styles and scripts
+        wp_enqueue_style('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/css/frontend.css', array(), FORMXR_VERSION);
+        wp_enqueue_script('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/js/frontend-improved.js', array('jquery'), FORMXR_VERSION, true);
         
         // Add Alpine.js for reactive UI
         wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
         wp_script_add_data('alpinejs', 'defer', true);
         
-        wp_localize_script('formxr-frontend', 'formxr_ajax', array(
+        wp_localize_script('formxr-frontend', 'formxr_frontend', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('formxr_nonce'),
+            'nonce' => wp_create_nonce('formxr_frontend_nonce'),
             'currency' => get_option('formxr_currency', 'USD'),
             'pricing_enabled' => get_option('formxr_pricing_enabled', 0)
         ));
@@ -330,15 +351,21 @@ class FormXR {
     
     public function enqueue_admin_scripts($hook) {
         if (strpos($hook, 'formxr') !== false) {
-            wp_enqueue_script('formxr-admin', FORMXR_PLUGIN_URL . 'assets/js/admin.js', array('jquery', 'jquery-ui-sortable'), FORMXR_VERSION, true);
-            wp_enqueue_script('formxr-questionnaire-builder', FORMXR_PLUGIN_URL . 'assets/js/questionnaire-builder.js', array(), FORMXR_VERSION, true);
-            wp_enqueue_style('formxr-admin', FORMXR_PLUGIN_URL . 'assets/css/admin.css', array(), FORMXR_VERSION);
+            // Enqueue improved admin styles (in order)
+            wp_enqueue_style('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/css/admin-core.css', array(), FORMXR_VERSION);
+            wp_enqueue_style('formxr-admin-components', FORMXR_PLUGIN_URL . 'assets/css/admin-components.css', array('formxr-admin-core'), FORMXR_VERSION);
+            wp_enqueue_style('formxr-admin', FORMXR_PLUGIN_URL . 'assets/css/admin.css', array('formxr-admin-components'), FORMXR_VERSION);
+            
+            // Enqueue improved admin scripts
+            wp_enqueue_script('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery', 'jquery-ui-sortable'), FORMXR_VERSION, true);
+            wp_enqueue_script('formxr-admin', FORMXR_PLUGIN_URL . 'assets/js/admin.js', array('formxr-admin-core'), FORMXR_VERSION, true);
+            wp_enqueue_script('formxr-questionnaire-builder', FORMXR_PLUGIN_URL . 'assets/js/questionnaire-builder.js', array('formxr-admin-core'), FORMXR_VERSION, true);
             
             // Add Alpine.js for reactive UI in admin
             wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
             wp_script_add_data('alpinejs', 'defer', true);
             
-            wp_localize_script('formxr-admin', 'formxr_admin_ajax', array(
+            wp_localize_script('formxr-admin-core', 'formxr_admin', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('formxr_admin_nonce'),
                 'strings' => array(

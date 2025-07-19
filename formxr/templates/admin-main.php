@@ -58,6 +58,201 @@ if (!$submissions_exists || !$questionnaires_exists || !$questions_exists) {
     
     $show_setup_notice = false;
 }
+
+// Format currency
+function format_currency($amount, $currency = 'USD') {
+    $symbols = array(
+        'USD' => '$',
+        'EUR' => '€',
+        'GBP' => '£',
+        'JPY' => '¥'
+    );
+    
+    $symbol = isset($symbols[$currency]) ? $symbols[$currency] : $currency . ' ';
+    return $symbol . number_format($amount, 2);
+}
+?>
+
+<div class="formxr-dashboard">
+    <?php if ($show_setup_notice): ?>
+    <!-- Welcome Notice -->
+    <div class="formxr-card formxr-mb-4">
+        <div class="formxr-card-body">
+            <div class="formxr-d-flex formxr-align-items-center formxr-mb-3">
+                <div style="font-size: 3rem; margin-right: 1rem;">🚀</div>
+                <div>
+                    <h2 class="formxr-mb-1"><?php _e('Welcome to FormXR!', 'formxr'); ?></h2>
+                    <p class="formxr-mb-0"><?php _e('Get started by creating your first questionnaire or configuring your settings.', 'formxr'); ?></p>
+                </div>
+            </div>
+            <div class="formxr-d-flex" style="gap: 1rem;">
+                <a href="<?php echo admin_url('admin.php?page=formxr-new-questionnaire'); ?>" class="formxr-btn formxr-btn-primary">
+                    <span class="formxr-btn-icon">➕</span>
+                    <?php _e('Create First Questionnaire', 'formxr'); ?>
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=formxr-settings'); ?>" class="formxr-btn formxr-btn-secondary">
+                    <span class="formxr-btn-icon">⚙️</span>
+                    <?php _e('Configure Settings', 'formxr'); ?>
+                </a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Statistics Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <!-- Total Submissions -->
+        <div class="formxr-card">
+            <div class="formxr-card-body">
+                <div class="formxr-d-flex formxr-justify-content-between formxr-align-items-center">
+                    <div>
+                        <p class="formxr-mb-1" style="color: var(--formxr-text-secondary); font-size: 0.875rem;">
+                            <?php _e('Total Submissions', 'formxr'); ?>
+                        </p>
+                        <h3 class="formxr-mb-0 formxr-stat-total-submissions" style="font-size: 2rem; font-weight: 700;">
+                            <?php echo number_format($total_submissions); ?>
+                        </h3>
+                    </div>
+                    <div style="font-size: 2.5rem; opacity: 0.6;">📊</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Submissions -->
+        <div class="formxr-card">
+            <div class="formxr-card-body">
+                <div class="formxr-d-flex formxr-justify-content-between formxr-align-items-center">
+                    <div>
+                        <p class="formxr-mb-1" style="color: var(--formxr-text-secondary); font-size: 0.875rem;">
+                            <?php _e('Today', 'formxr'); ?>
+                        </p>
+                        <h3 class="formxr-mb-0 formxr-stat-submissions-today" style="font-size: 2rem; font-weight: 700;">
+                            <?php echo number_format($submissions_today); ?>
+                        </h3>
+                    </div>
+                    <div style="font-size: 2.5rem; opacity: 0.6;">📅</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- This Week -->
+        <div class="formxr-card">
+            <div class="formxr-card-body">
+                <div class="formxr-d-flex formxr-justify-content-between formxr-align-items-center">
+                    <div>
+                        <p class="formxr-mb-1" style="color: var(--formxr-text-secondary); font-size: 0.875rem;">
+                            <?php _e('This Week', 'formxr'); ?>
+                        </p>
+                        <h3 class="formxr-mb-0 formxr-stat-submissions-week" style="font-size: 2rem; font-weight: 700;">
+                            <?php echo number_format($submissions_week); ?>
+                        </h3>
+                    </div>
+                    <div style="font-size: 2.5rem; opacity: 0.6;">📈</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Potential -->
+        <div class="formxr-card">
+            <div class="formxr-card-body">
+                <div class="formxr-d-flex formxr-justify-content-between formxr-align-items-center">
+                    <div>
+                        <p class="formxr-mb-1" style="color: var(--formxr-text-secondary); font-size: 0.875rem;">
+                            <?php _e('Revenue Potential', 'formxr'); ?>
+                        </p>
+                        <h3 class="formxr-mb-0" style="font-size: 2rem; font-weight: 700;">
+                            <?php echo format_currency($total_revenue_potential, $currency); ?>
+                        </h3>
+                    </div>
+                    <div style="font-size: 2.5rem; opacity: 0.6;">💰</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="formxr-card formxr-mb-4">
+        <div class="formxr-card-header">
+            <h3 class="formxr-card-title"><?php _e('Quick Actions', 'formxr'); ?></h3>
+        </div>
+        <div class="formxr-card-body">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <a href="<?php echo admin_url('admin.php?page=formxr-new-questionnaire'); ?>" class="formxr-btn formxr-btn-primary">
+                    <span class="formxr-btn-icon">➕</span>
+                    <?php _e('New Questionnaire', 'formxr'); ?>
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="formxr-btn formxr-btn-secondary">
+                    <span class="formxr-btn-icon">📝</span>
+                    <?php _e('View All Questionnaires', 'formxr'); ?>
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=formxr-submissions'); ?>" class="formxr-btn formxr-btn-secondary">
+                    <span class="formxr-btn-icon">📊</span>
+                    <?php _e('View Submissions', 'formxr'); ?>
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=formxr-analytics'); ?>" class="formxr-btn formxr-btn-secondary">
+                    <span class="formxr-btn-icon">📈</span>
+                    <?php _e('Analytics', 'formxr'); ?>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Submissions -->
+    <?php if (!empty($recent_submissions)): ?>
+    <div class="formxr-card">
+        <div class="formxr-card-header">
+            <h3 class="formxr-card-title"><?php _e('Recent Submissions', 'formxr'); ?></h3>
+        </div>
+        <div class="formxr-card-body">
+            <div class="formxr-table-responsive">
+                <table class="formxr-table">
+                    <thead>
+                        <tr>
+                            <th><?php _e('Questionnaire', 'formxr'); ?></th>
+                            <th><?php _e('Submitted', 'formxr'); ?></th>
+                            <th><?php _e('Price', 'formxr'); ?></th>
+                            <th><?php _e('Actions', 'formxr'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recent_submissions as $submission): ?>
+                        <tr>
+                            <td>
+                                <strong><?php echo esc_html($submission->questionnaire_title ?: __('Unknown', 'formxr')); ?></strong>
+                            </td>
+                            <td>
+                                <?php echo human_time_diff(strtotime($submission->submitted_at), current_time('timestamp')) . ' ' . __('ago', 'formxr'); ?>
+                            </td>
+                            <td>
+                                <span class="formxr-badge formxr-badge-success">
+                                    <?php echo format_currency($submission->calculated_price, $currency); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <a href="<?php echo admin_url('admin.php?page=formxr-submissions&action=view&id=' . $submission->id); ?>" 
+                                   class="formxr-btn formxr-btn-sm formxr-btn-secondary">
+                                    <?php _e('View', 'formxr'); ?>
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+    $recent_submissions = $wpdb->get_results("
+        SELECT s.*, q.title as questionnaire_title 
+        FROM $submissions_table s 
+        LEFT JOIN $questionnaires_table q ON s.questionnaire_id = q.id 
+        ORDER BY s.submitted_at DESC 
+        LIMIT 5
+    ");
+    
+    $show_setup_notice = false;
+}
 ?>
 
 
