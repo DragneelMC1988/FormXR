@@ -37,6 +37,27 @@ class FormXR {
             add_action('admin_init', array($this, 'check_database_version'));
             // Ensure database tables exist on any admin page load
             add_action('admin_init', array($this, 'ensure_database_tables'));
+            
+            // Additional check specifically for FormXR admin pages
+            if (isset($_GET['page']) && strpos($_GET['page'], 'formxr') !== false) {
+                // Force set database version to prevent infinite upgrade loops
+                // Since the errors show columns already exist, we're clearly at version 2.3
+                $current_version = get_option('formxr_db_version', '1.0');
+                if (version_compare($current_version, '2.3', '<')) {
+                    update_option('formxr_db_version', '2.3');
+                    error_log('FormXR: Force updated database version to 2.3 to prevent upgrade loops');
+                }
+                
+                $this->ensure_database_tables();
+                $this->check_database_version();
+            }
+            
+            // Emergency database repair trigger (only if specifically requested)
+            if (isset($_GET['formxr_repair_db']) && $_GET['formxr_repair_db'] === 'force' && current_user_can('manage_options')) {
+                $this->emergency_database_repair();
+                wp_redirect(admin_url('admin.php?page=formxr&repair=success'));
+                exit;
+            }
         }
         
         // Add admin menu
@@ -54,9 +75,16 @@ class FormXR {
         add_action('wp_ajax_nopriv_formxr_submit_form', array($this, 'handle_form_submission'));
         add_action('wp_ajax_formxr_calculate_price', array($this, 'calculate_price_ajax'));
         add_action('wp_ajax_nopriv_formxr_calculate_price', array($this, 'calculate_price_ajax'));
-        add_action('wp_ajax_formxr_save_complete_questionnaire', array($this, 'save_complete_questionnaire_ajax'));
         add_action('wp_ajax_formxr_delete_questionnaire', array($this, 'delete_questionnaire_ajax'));
         add_action('wp_ajax_formxr_test_email', array($this, 'test_email_ajax'));
+        
+        // New 5-step questionnaire creation AJAX handler
+        add_action('wp_ajax_formxr_create_questionnaire', array($this, 'create_questionnaire_ajax'));
+        
+        // Database repair handler
+        add_action('wp_ajax_formxr_repair_database', array($this, 'repair_database_ajax'));
+        
+
         
         // Export handler
         add_action('wp_ajax_formxr_export_csv', array($this, 'export_csv'));
@@ -72,11 +100,13 @@ class FormXR {
         $this->create_submissions_table();
         $this->upgrade_database_to_2_0();
         $this->upgrade_database_to_2_1();
+        $this->upgrade_database_to_2_2();
+        $this->upgrade_database_to_2_3();
         $this->set_default_settings();
         
         // Set initial database version
         if (!get_option('formxr_db_version')) {
-            update_option('formxr_db_version', '2.1');
+            update_option('formxr_db_version', '2.3');
         }
         
         flush_rewrite_rules();
@@ -98,7 +128,29 @@ class FormXR {
         
         if (version_compare($current_version, '2.1', '<')) {
             $this->upgrade_database_to_2_1();
-            update_option('formxr_db_version', '2.1');
+        }
+        
+        if (version_compare($current_version, '2.2', '<')) {
+            $this->upgrade_database_to_2_2();
+        }
+        
+        if (version_compare($current_version, '2.3', '<')) {
+            $this->upgrade_database_to_2_3();
+            update_option('formxr_db_version', '2.3');
+        }
+        
+        // Only force check if we're not already at version 2.3
+        if (version_compare($current_version, '2.3', '<')) {
+            // Force check for show_price_frontend column existence only once
+            global $wpdb;
+            $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+            
+            // Use a more reliable column check
+            $columns = $wpdb->get_col("DESCRIBE `$questionnaires_table`");
+            if (!in_array('show_price_frontend', $columns)) {
+                error_log('FormXR: show_price_frontend column missing, forcing upgrade...');
+                $this->upgrade_database_to_2_3();
+            }
         }
     }
     
@@ -107,12 +159,46 @@ class FormXR {
         
         // Check if core tables exist, if not create them
         $steps_table = $wpdb->prefix . 'formxr_steps';
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$steps_table'") == $steps_table;
+        $questions_table = $wpdb->prefix . 'formxr_questions';
+        $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+        $submissions_table = $wpdb->prefix . 'formxr_submissions';
         
-        if (!$table_exists) {
+        $steps_exists = $wpdb->get_var("SHOW TABLES LIKE '$steps_table'") == $steps_table;
+        $questions_exists = $wpdb->get_var("SHOW TABLES LIKE '$questions_table'") == $questions_table;
+        $questionnaires_exists = $wpdb->get_var("SHOW TABLES LIKE '$questionnaires_table'") == $questionnaires_table;
+        $submissions_exists = $wpdb->get_var("SHOW TABLES LIKE '$submissions_table'") == $submissions_table;
+        
+        if (!$steps_exists || !$questions_exists || !$questionnaires_exists || !$submissions_exists) {
+            error_log('FormXR: Missing tables detected, creating all tables');
             // Tables don't exist, create them
             $this->create_submissions_table();
             $this->upgrade_database_to_2_0();
+            $this->upgrade_database_to_2_1();
+            $this->upgrade_database_to_2_2();
+            $this->upgrade_database_to_2_3();
+        }
+        
+        // Only check for missing columns if we haven't already marked as version 2.3
+        $current_version = get_option('formxr_db_version', '1.0');
+        if (version_compare($current_version, '2.3', '<') && $questionnaires_exists) {
+            // Use DESCRIBE to get more reliable column information
+            $columns = $wpdb->get_col("DESCRIBE `$questionnaires_table`");
+            
+            if (!in_array('show_price_frontend', $columns)) {
+                error_log('FormXR: show_price_frontend column missing, adding it...');
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `show_price_frontend` TINYINT(1) DEFAULT 1 AFTER `pricing_enabled`");
+                if ($result === false) {
+                    error_log('FormXR: Failed to add show_price_frontend column: ' . $wpdb->last_error);
+                }
+            }
+            
+            if (!in_array('pricing_enabled', $columns)) {
+                error_log('FormXR: pricing_enabled column missing, adding it...');
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `pricing_enabled` TINYINT(1) DEFAULT 0 AFTER `status`");
+                if ($result === false) {
+                    error_log('FormXR: Failed to add pricing_enabled column: ' . $wpdb->last_error);
+                }
+            }
         }
     }
     
@@ -163,6 +249,7 @@ class FormXR {
             description text,
             status varchar(20) DEFAULT 'active',
             pricing_enabled tinyint(1) DEFAULT 0,
+            show_price_frontend tinyint(1) DEFAULT 1,
             min_price decimal(10,2) DEFAULT 100,
             max_price decimal(10,2) DEFAULT 2000,
             base_price decimal(10,2) DEFAULT 500,
@@ -231,22 +318,41 @@ class FormXR {
         ) $charset_collate;";
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql_questionnaires);
-        dbDelta($sql_steps);
-        dbDelta($sql_questions);
-        dbDelta($sql_submissions);
+        
+        error_log('FormXR: Creating tables with dbDelta');
+        $result1 = dbDelta($sql_questionnaires);
+        $result2 = dbDelta($sql_steps);
+        $result3 = dbDelta($sql_questions);
+        $result4 = dbDelta($sql_submissions);
+        
+        error_log('FormXR: dbDelta results - Questionnaires: ' . print_r($result1, true));
+        error_log('FormXR: dbDelta results - Steps: ' . print_r($result2, true));
+        error_log('FormXR: dbDelta results - Questions: ' . print_r($result3, true));
+        error_log('FormXR: dbDelta results - Submissions: ' . print_r($result4, true));
+        
+        // Verify tables were created
+        $steps_table = $wpdb->prefix . 'formxr_steps';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$steps_table'") == $steps_table;
+        error_log('FormXR: Steps table exists after creation: ' . ($table_exists ? 'YES' : 'NO'));
+        
+        if ($table_exists) {
+            $columns = $wpdb->get_col("SHOW COLUMNS FROM `$steps_table`");
+            error_log('FormXR: Steps table columns: ' . implode(', ', $columns));
+        }
     }
     
     private function upgrade_database_to_2_1() {
         global $wpdb;
         
         $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+        $questions_table = $wpdb->prefix . 'formxr_questions';
         
         // Check if new email template columns exist
         $admin_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_template'");
         $user_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_template'");
         $admin_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_subject'");
         $user_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_subject'");
+        $enable_multi_step_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'enable_multi_step'");
         
         // Add admin email template column
         if (empty($admin_email_template_exists)) {
@@ -267,6 +373,136 @@ class FormXR {
         if (empty($user_email_subject_exists)) {
             $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `user_email_subject` VARCHAR(255) AFTER `admin_email_subject`");
         }
+        
+        // Add enable_multi_step column
+        if (empty($enable_multi_step_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `enable_multi_step` TINYINT(1) DEFAULT 0 AFTER `user_email_subject`");
+        }
+        
+        // Create question groups table
+        $question_groups_table = $wpdb->prefix . 'formxr_question_groups';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$question_groups_table'") == $question_groups_table;
+        
+        if (!$table_exists) {
+            $charset_collate = $wpdb->get_charset_collate();
+            $sql_question_groups = "CREATE TABLE $question_groups_table (
+                id mediumint(9) NOT NULL AUTO_INCREMENT,
+                questionnaire_id mediumint(9) NOT NULL,
+                title varchar(255) NOT NULL,
+                description text,
+                group_order int(3) DEFAULT 1,
+                created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY questionnaire_id (questionnaire_id)
+            ) $charset_collate;";
+            
+            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+            dbDelta($sql_question_groups);
+        }
+        
+        // Add question_group_id column to questions table
+        $question_group_id_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questions_table` LIKE 'question_group_id'");
+        if (empty($question_group_id_exists)) {
+            $wpdb->query("ALTER TABLE `$questions_table` ADD COLUMN `question_group_id` mediumint(9) NULL AFTER `questionnaire_id`");
+            $wpdb->query("ALTER TABLE `$questions_table` ADD KEY `question_group_id` (`question_group_id`)");
+        }
+    }
+    
+    private function upgrade_database_to_2_2() {
+        global $wpdb;
+        
+        $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+        $questions_table = $wpdb->prefix . 'formxr_questions';
+        
+        // Add price column to questions table if it doesn't exist
+        $price_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questions_table` LIKE 'price'");
+        if (empty($price_exists)) {
+            $wpdb->query("ALTER TABLE `$questions_table` ADD COLUMN `price` DECIMAL(10,2) DEFAULT 0.00 AFTER `options`");
+        }
+        
+        // Check if questionnaires table has price column and remove it
+        $questionnaire_price_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'price'");
+        if (!empty($questionnaire_price_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` DROP COLUMN `price`");
+        }
+    }
+    
+    private function upgrade_database_to_2_3() {
+        global $wpdb;
+        
+        $submissions_table = $wpdb->prefix . 'formxr_submissions';
+        
+        // Add status column to submissions table if it doesn't exist
+        $status_exists = $wpdb->get_results("SHOW COLUMNS FROM `$submissions_table` LIKE 'status'");
+        if (empty($status_exists)) {
+            $wpdb->query("ALTER TABLE `$submissions_table` ADD COLUMN `status` VARCHAR(20) DEFAULT 'completed' AFTER `calculated_price`");
+        }
+        
+        // Add enable_multi_step column to questionnaires table if it doesn't exist
+        $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+        $multi_step_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'enable_multi_step'");
+        if (empty($multi_step_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `enable_multi_step` TINYINT(1) DEFAULT 0 AFTER `status`");
+        }
+        
+        // Add show_price_frontend column to questionnaires table if it doesn't exist
+        $show_price_frontend_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'show_price_frontend'");
+        if (empty($show_price_frontend_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `show_price_frontend` TINYINT(1) DEFAULT 1 AFTER `pricing_enabled`");
+        }
+        
+        // Add email template columns if they don't exist
+        $admin_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_template'");
+        if (empty($admin_email_template_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `admin_email_template` TEXT AFTER `email_template`");
+        }
+        
+        $user_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_template'");
+        if (empty($user_email_template_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `user_email_template` TEXT AFTER `admin_email_template`");
+        }
+        
+        $admin_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_subject'");
+        if (empty($admin_email_subject_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `admin_email_subject` VARCHAR(255) AFTER `user_email_template`");
+        }
+        
+        $user_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_subject'");
+        if (empty($user_email_subject_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `user_email_subject` VARCHAR(255) AFTER `admin_email_subject`");
+        }
+    }
+    
+    /**
+     * Force recreate the steps table with correct structure
+     */
+    private function force_recreate_steps_table() {
+        global $wpdb;
+        
+        $steps_table = $wpdb->prefix . 'formxr_steps';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // Drop existing table if it exists
+        $wpdb->query("DROP TABLE IF EXISTS `$steps_table`");
+        
+        // Create new table with correct structure
+        $sql = "CREATE TABLE `$steps_table` (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            questionnaire_id mediumint(9) NOT NULL,
+            step_number int(3) NOT NULL,
+            title varchar(255) NOT NULL,
+            description text,
+            can_skip tinyint(1) DEFAULT 0,
+            step_order int(3) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY questionnaire_id (questionnaire_id)
+        ) $charset_collate;";
+        
+        $result = $wpdb->query($sql);
+        error_log('FormXR: Force recreated steps table, result: ' . ($result !== false ? 'SUCCESS' : 'FAILED'));
+        
+        return $result !== false;
     }
     
     private function set_default_settings() {
@@ -352,9 +588,6 @@ class FormXR {
                 case 'new':
                     $this->render_admin_page('admin-questionnaire-new');
                     return;
-                case 'wizard':
-                    $this->render_admin_page('admin-questionnaire-wizard');
-                    return;
                 case 'edit':
                     $this->render_admin_page('admin-questionnaire-edit');
                     return;
@@ -387,20 +620,40 @@ class FormXR {
     }
     
     public function enqueue_frontend_scripts() {
-        // Enqueue improved frontend styles and scripts
-        wp_enqueue_style('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/css/frontend.css', array(), FORMXR_VERSION);
-        wp_enqueue_script('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/js/frontend-improved.js', array('jquery'), FORMXR_VERSION, true);
+        global $post;
         
-        // Add Alpine.js for reactive UI
-        wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
-        wp_script_add_data('alpinejs', 'defer', true);
+        // Check if we need to load FormXR styles (shortcode present or specific page)
+        $load_formxr = false;
         
-        wp_localize_script('formxr-frontend', 'formxr_frontend', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('formxr_frontend_nonce'),
-            'currency' => get_option('formxr_currency', 'USD'),
-            'pricing_enabled' => get_option('formxr_pricing_enabled', 0)
-        ));
+        if (is_a($post, 'WP_Post')) {
+            // Check if post content contains FormXR shortcode
+            if (has_shortcode($post->post_content, 'formxr_form')) {
+                $load_formxr = true;
+            }
+        }
+        
+        // Always load on FormXR admin pages or if explicitly requested
+        if (is_admin() || isset($_GET['formxr_preview']) || $load_formxr) {
+            // Enqueue base frontend styles
+            wp_enqueue_style('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/css/frontend.css', array(), FORMXR_VERSION);
+            
+            // Enqueue dedicated questionnaire styles
+            wp_enqueue_style('formxr-frontend-questionnaire', FORMXR_PLUGIN_URL . 'assets/css/frontend-questionnaire.css', array('formxr-frontend'), FORMXR_VERSION);
+            
+            wp_enqueue_script('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/js/frontend-improved.js', array('jquery'), FORMXR_VERSION, true);
+            
+            // Add Alpine.js for reactive UI
+            wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
+            wp_script_add_data('alpinejs', 'defer', true);
+            
+            wp_localize_script('formxr-frontend', 'formxr_frontend', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('formxr_frontend_nonce'),
+                'currency' => get_option('formxr_currency', 'USD'),
+                'pricing_enabled' => get_option('formxr_pricing_enabled', 0),
+                'show_price_frontend' => 1 // Default to show, will be overridden in template
+            ));
+        }
     }
     
     public function enqueue_admin_scripts($hook) {
@@ -420,6 +673,11 @@ class FormXR {
             // Add Alpine.js for reactive UI in admin
             wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
             wp_script_add_data('alpinejs', 'defer', true);
+            
+            // Load debug script in development mode (when WP_DEBUG is enabled)
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                wp_enqueue_script('formxr-debug', FORMXR_PLUGIN_URL . 'assets/js/debug.js', array('alpinejs'), $version, true);
+            }
             
             wp_localize_script('formxr-admin-core', 'formxr_admin_ajax', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
@@ -443,9 +701,45 @@ class FormXR {
         
         $questionnaire_id = intval($atts['id']);
         
+        // Ensure frontend styles are loaded when shortcode is rendered
+        $this->ensure_frontend_styles_loaded();
+        
         ob_start();
         include FORMXR_PLUGIN_PATH . 'templates/frontend-form.php';
         return ob_get_clean();
+    }
+    
+    /**
+     * Ensure frontend styles are loaded (fallback for dynamic content)
+     */
+    private function ensure_frontend_styles_loaded() {
+        // Check if styles are already enqueued
+        if (!wp_style_is('formxr-frontend-questionnaire', 'enqueued')) {
+            // Enqueue base frontend styles
+            wp_enqueue_style('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/css/frontend.css', array(), FORMXR_VERSION);
+            
+            // Enqueue dedicated questionnaire styles
+            wp_enqueue_style('formxr-frontend-questionnaire', FORMXR_PLUGIN_URL . 'assets/css/frontend-questionnaire.css', array('formxr-frontend'), FORMXR_VERSION);
+        }
+        
+        // Check if scripts are already enqueued
+        if (!wp_script_is('formxr-frontend', 'enqueued')) {
+            wp_enqueue_script('formxr-frontend', FORMXR_PLUGIN_URL . 'assets/js/frontend-improved.js', array('jquery'), FORMXR_VERSION, true);
+            
+            // Add Alpine.js for reactive UI
+            if (!wp_script_is('alpinejs', 'enqueued')) {
+                wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
+                wp_script_add_data('alpinejs', 'defer', true);
+            }
+            
+            wp_localize_script('formxr-frontend', 'formxr_frontend', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('formxr_frontend_nonce'),
+                'currency' => get_option('formxr_currency', 'USD'),
+                'pricing_enabled' => get_option('formxr_pricing_enabled', 0),
+                'show_price_frontend' => 1 // Default to show, will be overridden in template
+            ));
+        }
     }
     
     public function register_settings() {
@@ -499,17 +793,67 @@ class FormXR {
         ));
     }
     
-    public function save_complete_questionnaire_ajax() {
-        check_ajax_referer('formxr_admin_nonce', 'nonce');
+    public function create_questionnaire_ajax() {
+        // Prevent any output before JSON response
+        ob_start();
         
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('Unauthorized', 'formxr'));
+        // Enable error reporting for debugging
+        error_log('FormXR: create_questionnaire_ajax called');
+        
+        try {
+            check_ajax_referer('formxr_admin_nonce', 'nonce');
+        } catch (Exception $e) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: Nonce verification failed: ' . $e->getMessage());
+            wp_send_json_error(__('Security check failed', 'formxr'));
+            return;
         }
         
-        $questionnaire_data = isset($_POST['questionnaire_data']) ? json_decode(stripslashes($_POST['questionnaire_data']), true) : array();
+        if (!current_user_can('manage_options')) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: User capability check failed');
+            wp_send_json_error(__('Unauthorized', 'formxr'));
+            return;
+        }
         
-        if (empty($questionnaire_data)) {
-            wp_send_json_error(__('No questionnaire data provided', 'formxr'));
+        // Validate required POST data
+        if (!isset($_POST['basic_info']) || !isset($_POST['questions_config'])) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: Missing required POST data');
+            wp_send_json_error(__('Missing required data', 'formxr'));
+            return;
+        }
+        
+        // Get submitted data
+        $basic_info = json_decode(stripslashes($_POST['basic_info']), true);
+        $questions_config = json_decode(stripslashes($_POST['questions_config']), true);
+        $email_config = json_decode(stripslashes($_POST['email_config'] ?? '{}'), true);
+        $conditions_config = json_decode(stripslashes($_POST['conditions_config'] ?? '{}'), true);
+        
+        // Validate JSON decode
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: JSON decode error: ' . json_last_error_msg());
+            wp_send_json_error(__('Invalid data format', 'formxr'));
+            return;
+        }
+        
+        error_log('FormXR: Data parsed successfully');
+        
+        // Validate basic_info
+        if (!is_array($basic_info) || empty($basic_info['title'])) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: Invalid basic_info data');
+            wp_send_json_error(__('Questionnaire title is required', 'formxr'));
+            return;
+        }
+        
+        // Validate questions_config
+        if (!is_array($questions_config) || empty($questions_config['steps']) || !is_array($questions_config['steps'])) {
+            ob_end_clean(); // Clear any output
+            error_log('FormXR: Invalid questions_config data');
+            wp_send_json_error(__('At least one question step is required', 'formxr'));
+            return;
         }
         
         global $wpdb;
@@ -518,114 +862,109 @@ class FormXR {
         $wpdb->query('START TRANSACTION');
         
         try {
-            // Save questionnaire
-            $questionnaire_id = $this->save_questionnaire(array(
-                'title' => $questionnaire_data['title'],
-                'description' => $questionnaire_data['description'],
-                'pricing_enabled' => $questionnaire_data['pricing_enabled'] ? 1 : 0,
-                'email_recipients' => sanitize_text_field($questionnaire_data['email_recipients'] ?? ''),
-                'email_subject' => sanitize_text_field($questionnaire_data['email_subject'] ?? ''),
-                'email_template' => wp_kses_post($questionnaire_data['email_template'] ?? ''),
-                'notification_enabled' => $questionnaire_data['notification_enabled'] ? 1 : 0,
+            error_log('FormXR: Starting questionnaire creation');
+            
+            // Create questionnaire
+            $questionnaire_data = array(
+                'title' => sanitize_text_field($basic_info['title']),
+                'description' => sanitize_textarea_field($basic_info['description'] ?? ''),
+                'pricing_enabled' => !empty($basic_info['enablePricing']) ? 1 : 0,
+                'show_price_frontend' => !empty($basic_info['showPriceFrontend']) ? 1 : 0,
+                'base_price' => floatval($conditions_config['basePrice'] ?? 0),
+                'min_price' => floatval($conditions_config['minPrice'] ?? 0),
+                'max_price' => floatval($conditions_config['maxPrice'] ?? 10000),
+                'email_recipients' => sanitize_email($email_config['adminEmail'] ?? get_option('admin_email')),
+                'email_subject' => sanitize_text_field($email_config['adminSubject'] ?? 'New Form Submission'),
+                'email_template' => wp_kses_post($email_config['adminTemplate'] ?? ''),
+                'user_email_template' => wp_kses_post($email_config['userTemplate'] ?? ''),
+                'user_email_subject' => sanitize_text_field($email_config['userSubject'] ?? 'Thank you'),
+                'notification_enabled' => !empty($email_config['notificationsEnabled']) ? 1 : 0,
+                'enable_multi_step' => !empty($questions_config['enableMultiStep']) ? 1 : 0,
                 'status' => 'active'
-            ));
+            );
+            
+            error_log('FormXR: Questionnaire data prepared: ' . print_r($questionnaire_data, true));
+            
+            $questionnaire_id = $this->save_questionnaire($questionnaire_data);
             
             if (!$questionnaire_id) {
-                throw new Exception('Failed to save questionnaire');
+                throw new Exception('Failed to create questionnaire');
             }
             
-            // Save steps and questions
-            foreach ($questionnaire_data['steps'] as $step_index => $step_data) {
-                // Validate step title
-                if (empty(trim($step_data['title']))) {
-                    throw new Exception("Step " . ($step_index + 1) . " must have a title");
-                }
-                
-                $step_id = $this->save_step(array(
-                    'questionnaire_id' => $questionnaire_id,
-                    'step_number' => $step_index + 1,
-                    'title' => $step_data['title'],
-                    'description' => $step_data['description'] ?? '',
-                    'can_skip' => false,
-                    'step_order' => $step_index
-                ));
-                
-                if (is_wp_error($step_id)) {
-                    throw new Exception('Failed to save step: ' . $step_id->get_error_message());
-                }
-                
-                if (!$step_id) {
-                    throw new Exception('Failed to save step: ' . $wpdb->last_error . ' | Query: ' . $wpdb->last_query);
-                }
-                
-                // Validate that step has at least one question
-                if (empty($step_data['questions']) || !is_array($step_data['questions'])) {
-                    throw new Exception("Step " . ($step_index + 1) . " must have at least one question");
-                }
-                
-                // Check if step has at least one question with text
-                $hasValidQuestion = false;
-                foreach ($step_data['questions'] as $question_data) {
-                    if (!empty(trim($question_data['text']))) {
-                        $hasValidQuestion = true;
-                        break;
-                    }
-                }
-                
-                if (!$hasValidQuestion) {
-                    throw new Exception("Step " . ($step_index + 1) . " must have at least one question with text");
-                }
-                
-                // Save questions for this step
-                foreach ($step_data['questions'] as $question_index => $question_data) {
-                    // Skip questions without text
-                    if (empty(trim($question_data['text']))) {
-                        continue;
-                    }
+            error_log('FormXR: Questionnaire created with ID: ' . $questionnaire_id);
+            
+            // Create steps and questions
+            if (!empty($questions_config['steps'])) {
+                foreach ($questions_config['steps'] as $step_index => $step_data) {
+                    error_log('FormXR: Processing step ' . $step_index);
                     
-                    $options = '';
-                    if (!empty($question_data['options'])) {
-                        $options = json_encode($question_data['options']);
-                    }
-                    
-                    $question_id = $this->save_question(array(
-                        'step_id' => $step_id,
-                        'question_text' => $question_data['text'],
-                        'question_type' => $question_data['type'],
-                        'options' => $options,
-                        'is_required' => $question_data['required'] ? 1 : 0,
-                        'question_order' => $question_index,
-                        'pricing_amount' => floatval($question_data['price_impact'] ?? 0)
+                    $step_id = $this->save_step(array(
+                        'questionnaire_id' => $questionnaire_id,
+                        'step_number' => $step_index + 1,
+                        'title' => sanitize_text_field($step_data['title'] ?? 'Step ' . ($step_index + 1)),
+                        'description' => sanitize_textarea_field($step_data['description'] ?? ''),
+                        'can_skip' => false,
+                        'step_order' => $step_index
                     ));
                     
-                    if (!$question_id) {
-                        throw new Exception('Failed to save question: ' . $wpdb->last_error);
+                    if (is_wp_error($step_id) || !$step_id) {
+                        throw new Exception('Failed to create step: ' . (is_wp_error($step_id) ? $step_id->get_error_message() : 'Unknown error'));
                     }
-                }
-            }
-            
-            // Save conditions if any
-            if (!empty($questionnaire_data['conditions'])) {
-                foreach ($questionnaire_data['conditions'] as $condition) {
-                    // Save conditions logic here
-                    // For now, store as JSON in questionnaire table
-                    $wpdb->update(
-                        $wpdb->prefix . 'formxr_questionnaires',
-                        array('conditions' => json_encode($questionnaire_data['conditions'])),
-                        array('id' => $questionnaire_id)
-                    );
+                    
+                    error_log('FormXR: Step created with ID: ' . $step_id);
+                    
+                    // Create questions for this step
+                    if (!empty($step_data['questions']) && is_array($step_data['questions'])) {
+                        foreach ($step_data['questions'] as $question_index => $question_data) {
+                            if (empty($question_data['label'])) {
+                                continue; // Skip questions without labels
+                            }
+                            
+                            error_log('FormXR: Processing question ' . $question_index . ': ' . $question_data['label']);
+                            
+                            $question_id = $this->save_question(array(
+                                'step_id' => $step_id,
+                                'question_text' => sanitize_text_field($question_data['label']),
+                                'question_type' => sanitize_text_field($question_data['type'] ?? 'text'),
+                                'options' => sanitize_textarea_field($question_data['options'] ?? ''),
+                                'is_required' => !empty($question_data['required']) ? 1 : 0,
+                                'question_order' => $question_index,
+                                'price' => floatval($question_data['price'] ?? 0),
+                                'option_prices' => $question_data['optionPrices'] ?? array()
+                            ));
+                            
+                            if (!$question_id) {
+                                throw new Exception('Failed to create question: ' . $question_data['label']);
+                            }
+                            
+                            error_log('FormXR: Question created with ID: ' . $question_id);
+                        }
+                    }
                 }
             }
             
             $wpdb->query('COMMIT');
+            error_log('FormXR: Transaction committed successfully');
+            
+            // Clear any buffered output before sending JSON
+            ob_end_clean();
             
             wp_send_json_success(array(
-                'id' => $questionnaire_id,
+                'questionnaire_id' => $questionnaire_id,
+                'shortcode' => '[formxr_form id="' . $questionnaire_id . '"]',
+                'edit_url' => admin_url('admin.php?page=formxr-questionnaires&action=edit&id=' . $questionnaire_id),
+                'view_url' => admin_url('admin.php?page=formxr-questionnaires'),
                 'message' => __('Questionnaire created successfully!', 'formxr')
             ));
             
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
+            error_log('FormXR: Exception in create_questionnaire_ajax: ' . $e->getMessage());
+            error_log('FormXR: Exception trace: ' . $e->getTraceAsString());
+            
+            // Clear any buffered output before sending JSON
+            ob_end_clean();
+            
             wp_send_json_error(__('Failed to create questionnaire: ', 'formxr') . $e->getMessage());
         }
     }
@@ -755,10 +1094,14 @@ class FormXR {
         global $wpdb;
         $table_name = $wpdb->prefix . 'formxr_questionnaires';
         
+        // Suppress any potential output
+        ob_start();
+        
         $questionnaire_data = array(
             'title' => sanitize_text_field($data['title']),
             'description' => sanitize_textarea_field($data['description'] ?? ''),
             'pricing_enabled' => isset($data['pricing_enabled']) ? 1 : 0,
+            'show_price_frontend' => isset($data['show_price_frontend']) ? 1 : 0,
             'min_price' => floatval($data['min_price'] ?? 100),
             'max_price' => floatval($data['max_price'] ?? 2000),
             'base_price' => floatval($data['base_price'] ?? 500),
@@ -768,7 +1111,10 @@ class FormXR {
             'email_recipients' => sanitize_textarea_field($data['email_recipients'] ?? ''),
             'email_subject' => sanitize_text_field($data['email_subject'] ?? ''),
             'email_template' => wp_kses_post($data['email_template'] ?? ''),
+            'user_email_template' => wp_kses_post($data['user_email_template'] ?? ''),
+            'user_email_subject' => sanitize_text_field($data['user_email_subject'] ?? ''),
             'notification_enabled' => isset($data['notification_enabled']) ? 1 : 0,
+            'enable_multi_step' => isset($data['enable_multi_step']) ? 1 : 0,
             'status' => sanitize_text_field($data['status'] ?? 'active')
         );
         
@@ -779,13 +1125,15 @@ class FormXR {
                 $table_name,
                 $questionnaire_data,
                 array('id' => intval($data['id'])),
-                array('%s', '%s', '%d', '%f', '%f', '%f', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s'),
+                array('%s', '%s', '%d', '%d', '%f', '%f', '%f', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s'),
                 array('%d')
             );
+            ob_end_clean(); // Clear any output
             return $result !== false ? $data['id'] : false;
         } else {
             // Insert new
             $result = $wpdb->insert($table_name, $questionnaire_data);
+            ob_end_clean(); // Clear any output
             return $result !== false ? $wpdb->insert_id : false;
         }
     }
@@ -794,29 +1142,84 @@ class FormXR {
         global $wpdb;
         $table_name = $wpdb->prefix . 'formxr_steps';
         
-        // Check if table exists and has required columns
+        // Force ensure table exists and has correct structure
+        $this->ensure_database_tables();
+        
+        // Check if table exists
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
         if (!$table_exists) {
-            return new WP_Error('table_missing', 'Steps table does not exist');
+            error_log('FormXR: Steps table does not exist, attempting to create it');
+            $this->create_submissions_table();
+            
+            // Re-check if table exists
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+            if (!$table_exists) {
+                return new WP_Error('table_missing', 'Steps table could not be created');
+            }
         }
         
-        // Check for required columns
+        // Check for required columns and ensure they exist
         $columns = $wpdb->get_col("SHOW COLUMNS FROM `$table_name`");
         $required_columns = array('questionnaire_id', 'step_number', 'title', 'description', 'can_skip', 'step_order');
         $missing_columns = array_diff($required_columns, $columns);
         
         if (!empty($missing_columns)) {
-            // Try to run database upgrade
+            error_log('FormXR: Missing columns in steps table: ' . implode(', ', $missing_columns));
+            
+            // Try to run database upgrades (suppress any output)
+            ob_start();
             $this->upgrade_database_to_2_0();
+            $this->upgrade_database_to_2_1();
+            $this->upgrade_database_to_2_3();
+            ob_end_clean();
             
             // Re-check columns
             $columns = $wpdb->get_col("SHOW COLUMNS FROM `$table_name`");
             $missing_columns = array_diff($required_columns, $columns);
             
             if (!empty($missing_columns)) {
-                return new WP_Error('missing_columns', 'Missing columns: ' . implode(', ', $missing_columns));
+                // Attempt to add missing columns manually
+                foreach ($missing_columns as $column) {
+                    switch ($column) {
+                        case 'questionnaire_id':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `questionnaire_id` mediumint(9) NOT NULL AFTER `id`");
+                            break;
+                        case 'step_number':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `step_number` int(3) NOT NULL AFTER `questionnaire_id`");
+                            break;
+                        case 'title':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `title` varchar(255) NOT NULL AFTER `step_number`");
+                            break;
+                        case 'description':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `description` text AFTER `title`");
+                            break;
+                        case 'can_skip':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `can_skip` tinyint(1) DEFAULT 0 AFTER `description`");
+                            break;
+                        case 'step_order':
+                            $wpdb->query("ALTER TABLE `$table_name` ADD COLUMN `step_order` int(3) DEFAULT 0 AFTER `can_skip`");
+                            break;
+                    }
+                }
+                
+                // Final check
+                $columns = $wpdb->get_col("SHOW COLUMNS FROM `$table_name`");
+                $missing_columns = array_diff($required_columns, $columns);
+                
+                if (!empty($missing_columns)) {
+                    error_log('FormXR: Still missing columns after manual addition, attempting force recreation');
+                    
+                    // Last resort: force recreate the table
+                    if ($this->force_recreate_steps_table()) {
+                        error_log('FormXR: Steps table force recreated successfully');
+                    } else {
+                        return new WP_Error('table_recreation_failed', 'Unable to recreate steps table with correct structure');
+                    }
+                }
             }
         }
+        
+        error_log('FormXR: Steps table structure verified, proceeding with save operation');
         
         $step_data = array(
             'questionnaire_id' => intval($data['questionnaire_id']),
@@ -860,6 +1263,11 @@ class FormXR {
         global $wpdb;
         $table_name = $wpdb->prefix . 'formxr_questions';
         
+        // Run database upgrade to ensure all columns exist (suppress any output)
+        ob_start();
+        $this->upgrade_database_to_2_3();
+        ob_end_clean();
+        
         $question_data = array(
             'step_id' => intval($data['step_id']),
             'question_text' => sanitize_textarea_field($data['question_text']),
@@ -867,10 +1275,20 @@ class FormXR {
             'options' => sanitize_textarea_field($data['options'] ?? ''),
             'is_required' => isset($data['is_required']) ? 1 : 0,
             'question_order' => intval($data['question_order'] ?? 0),
-            'pricing_amount' => floatval($data['pricing_amount'] ?? 0),
+            'pricing_amount' => floatval($data['price'] ?? $data['pricing_amount'] ?? 0),
             'pricing_visibility' => sanitize_text_field($data['pricing_visibility'] ?? 'hidden'),
             'conditions' => sanitize_textarea_field($data['conditions'] ?? '')
         );
+        
+        // Add option_prices if it exists (JSON encoded)
+        if (isset($data['option_prices']) || isset($data['optionPrices'])) {
+            $option_prices = $data['option_prices'] ?? $data['optionPrices'] ?? array();
+            if (is_string($option_prices)) {
+                $question_data['conditions'] = $option_prices; // Store in conditions field for now
+            } else {
+                $question_data['conditions'] = json_encode($option_prices);
+            }
+        }
         
         if (isset($data['id']) && $data['id'] > 0) {
             // Update existing
@@ -884,7 +1302,11 @@ class FormXR {
             return $result !== false ? $data['id'] : false;
         } else {
             // Insert new
-            $result = $wpdb->insert($table_name, $question_data);
+            $result = $wpdb->insert(
+                $table_name, 
+                $question_data,
+                array('%d', '%s', '%s', '%s', '%d', '%d', '%f', '%s', '%s')
+            );
             return $result !== false ? $wpdb->insert_id : false;
         }
     }
@@ -1233,6 +1655,101 @@ class FormXR {
         
         fclose($output);
         exit;
+    }
+    
+    public function repair_database_ajax() {
+        check_ajax_referer('formxr_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Unauthorized', 'formxr'));
+        }
+        
+        try {
+            global $wpdb;
+            
+            // Force database upgrade
+            $this->upgrade_database_to_2_3();
+            
+            // Check if show_price_frontend column exists
+            $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+            $show_price_frontend_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'show_price_frontend'");
+            
+            if (empty($show_price_frontend_exists)) {
+                // Manually add the column
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `show_price_frontend` TINYINT(1) DEFAULT 1 AFTER `pricing_enabled`");
+                if ($result === false) {
+                    throw new Exception('Failed to add show_price_frontend column');
+                }
+            }
+            
+            // Check if pricing_enabled column exists
+            $pricing_enabled_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'pricing_enabled'");
+            
+            if (empty($pricing_enabled_exists)) {
+                // Manually add the column
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `pricing_enabled` TINYINT(1) DEFAULT 0 AFTER `status`");
+                if ($result === false) {
+                    throw new Exception('Failed to add pricing_enabled column');
+                }
+            }
+            
+            // Update database version
+            update_option('formxr_db_version', '2.3');
+            
+            wp_send_json_success(__('Database repaired successfully!', 'formxr'));
+            
+        } catch (Exception $e) {
+            wp_send_json_error(__('Database repair failed: ', 'formxr') . $e->getMessage());
+        }
+    }
+    
+    public function emergency_database_repair() {
+        global $wpdb;
+        
+        try {
+            error_log('FormXR: Emergency database repair initiated');
+            
+            // Force database upgrade
+            $this->upgrade_database_to_2_3();
+            
+            // Check and add missing columns using more reliable method
+            $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+            
+            // Get all columns using DESCRIBE
+            $columns = $wpdb->get_col("DESCRIBE `$questionnaires_table`");
+            
+            // Check if show_price_frontend column exists
+            if (!in_array('show_price_frontend', $columns)) {
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `show_price_frontend` TINYINT(1) DEFAULT 1 AFTER `pricing_enabled`");
+                if ($result !== false) {
+                    error_log('FormXR: Added show_price_frontend column');
+                } else {
+                    error_log('FormXR: Failed to add show_price_frontend column: ' . $wpdb->last_error);
+                }
+            } else {
+                error_log('FormXR: show_price_frontend column already exists');
+            }
+            
+            // Check if pricing_enabled column exists
+            if (!in_array('pricing_enabled', $columns)) {
+                $result = $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `pricing_enabled` TINYINT(1) DEFAULT 0 AFTER `status`");
+                if ($result !== false) {
+                    error_log('FormXR: Added pricing_enabled column');
+                } else {
+                    error_log('FormXR: Failed to add pricing_enabled column: ' . $wpdb->last_error);
+                }
+            } else {
+                error_log('FormXR: pricing_enabled column already exists');
+            }
+            
+            // Update database version
+            update_option('formxr_db_version', '2.3');
+            
+            error_log('FormXR: Emergency database repair completed successfully');
+            
+        } catch (Exception $e) {
+            error_log('FormXR: Emergency database repair failed: ' . $e->getMessage());
+        }
     }
 }
 

@@ -122,13 +122,9 @@ $total_submissions = array_sum(array_column($questionnaires, 'submission_count')
             </p>
         </div>
         <div class="formxr-page-actions">
-            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=wizard'); ?>" class="formxr-btn formxr-btn-primary">
-                <span class="formxr-btn-icon">🧙‍♂️</span>
-                <?php _e('Create with Wizard', 'formxr'); ?>
-            </a>
-            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="formxr-btn formxr-btn-secondary">
+            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="formxr-btn formxr-btn-primary">
                 <span class="formxr-btn-icon">➕</span>
-                <?php _e('Quick Create', 'formxr'); ?>
+                <?php _e('Create New Questionnaire', 'formxr'); ?>
             </a>
         </div>
     </div>
@@ -221,8 +217,13 @@ $total_submissions = array_sum(array_column($questionnaires, 'submission_count')
                                         </span>
                                     </td>
                                     <td>
-                                        <?php if ($questionnaire->price > 0) : ?>
-                                            <span class="formxr-price">$<?php echo number_format($questionnaire->price, 2); ?></span>
+                                        <?php if (isset($questionnaire->base_price) && $questionnaire->base_price > 0) : ?>
+                                            <span class="formxr-price">$<?php echo number_format($questionnaire->base_price, 2); ?></span>
+                                            <?php if (isset($questionnaire->pricing_enabled) && $questionnaire->pricing_enabled) : ?>
+                                                <small class="formxr-text-muted"><?php _e('(Base)', 'formxr'); ?></small>
+                                            <?php endif; ?>
+                                        <?php elseif (isset($questionnaire->pricing_enabled) && $questionnaire->pricing_enabled) : ?>
+                                            <span class="formxr-text-muted"><?php _e('Variable pricing', 'formxr'); ?></span>
                                         <?php else : ?>
                                             <span class="formxr-text-muted"><?php _e('Free', 'formxr'); ?></span>
                                         <?php endif; ?>

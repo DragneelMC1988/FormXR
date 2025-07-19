@@ -1,0 +1,778 @@
+/**
+ * FormXR Frontend Questionnaire Styles
+ * Dedicated styles for questionnaire forms and multi-step interfaces
+ * Colors: #2AACE2, #8062AA, #E4E9EC, #0D152C, #4555A5, #13BCD4, #F36E24, #EF4681
+ */
+
+/* ================================
+   QUESTIONNAIRE VARIABLES
+================================ */
+
+:root {
+    /* Questionnaire Specific Colors */
+    --formxr-quest-primary: #2AACE2;
+    --formxr-quest-secondary: #8062AA;
+    --formxr-quest-accent: #4555A5;
+    --formxr-quest-highlight: #F36E24;
+    --formxr-quest-success: #13BCD4;
+    --formxr-quest-warning: #EF4681;
+    
+    /* Questionnaire Layout */
+    --formxr-quest-border-radius: 8px;
+    --formxr-quest-spacing: 1.5rem;
+    --formxr-quest-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --formxr-quest-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* ================================
+   QUESTIONNAIRE CONTAINER
+================================ */
+
+.formxr-questionnaire {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--formxr-quest-spacing);
+    background: #FFFFFF;
+    border-radius: var(--formxr-quest-border-radius);
+    box-shadow: var(--formxr-quest-shadow);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+}
+
+.formxr-questionnaire * {
+    box-sizing: border-box;
+}
+
+/* ================================
+   QUESTIONNAIRE HEADER
+================================ */
+
+.formxr-questionnaire-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid #E4E9EC;
+}
+
+.formxr-questionnaire-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--formxr-quest-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+.formxr-questionnaire-description {
+    font-size: 1.1rem;
+    color: #6B7280;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* ================================
+   PROGRESS INDICATOR
+================================ */
+
+.formxr-progress-container {
+    margin-bottom: 2rem;
+}
+
+.formxr-progress-bar {
+    background: #E4E9EC;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.formxr-progress-fill {
+    background: linear-gradient(90deg, var(--formxr-quest-primary), var(--formxr-quest-secondary));
+    height: 100%;
+    transition: width 0.4s ease;
+    border-radius: 4px;
+}
+
+.formxr-progress-text {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #6B7280;
+    font-weight: 500;
+}
+
+.formxr-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+}
+
+.formxr-progress-step {
+    flex: 1;
+    text-align: center;
+    position: relative;
+    padding: 0.5rem;
+}
+
+.formxr-progress-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -50%;
+    width: 100%;
+    height: 2px;
+    background: #E4E9EC;
+    transform: translateY(-50%);
+    z-index: 1;
+}
+
+.formxr-progress-step.completed::after {
+    background: var(--formxr-quest-primary);
+}
+
+.formxr-progress-step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #E4E9EC;
+    color: #6B7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.formxr-progress-step.completed .formxr-progress-step-number {
+    background: var(--formxr-quest-primary);
+    color: white;
+}
+
+.formxr-progress-step.active .formxr-progress-step-number {
+    background: var(--formxr-quest-secondary);
+    color: white;
+    transform: scale(1.1);
+}
+
+.formxr-progress-step-label {
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    color: #6B7280;
+    font-weight: 500;
+}
+
+.formxr-progress-step.completed .formxr-progress-step-label,
+.formxr-progress-step.active .formxr-progress-step-label {
+    color: var(--formxr-quest-primary);
+    font-weight: 600;
+}
+
+/* ================================
+   STEP CONTAINER
+================================ */
+
+.formxr-step {
+    display: none;
+    animation: fadeInUp 0.4s ease-out;
+}
+
+.formxr-step.active {
+    display: block;
+}
+
+.formxr-step-header {
+    margin-bottom: 1.5rem;
+}
+
+.formxr-step-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--formxr-quest-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+.formxr-step-description {
+    color: #6B7280;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* ================================
+   QUESTION GROUPS
+================================ */
+
+.formxr-question-group {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: #F9FAFB;
+    border-radius: var(--formxr-quest-border-radius);
+    border: 1px solid #E4E9EC;
+}
+
+.formxr-question-group-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--formxr-quest-secondary);
+    margin: 0 0 1rem 0;
+}
+
+.formxr-question-group-description {
+    color: #6B7280;
+    margin: 0 0 1.5rem 0;
+    font-size: 0.95rem;
+}
+
+/* ================================
+   FORM FIELDS
+================================ */
+
+.formxr-field {
+    margin-bottom: 1.5rem;
+}
+
+.formxr-field-label {
+    display: block;
+    font-weight: 600;
+    color: #0D152C;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.formxr-field-label .required {
+    color: var(--formxr-quest-warning);
+    margin-left: 0.25rem;
+}
+
+.formxr-field-description {
+    font-size: 0.9rem;
+    color: #6B7280;
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.formxr-input,
+.formxr-select,
+.formxr-textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #E4E9EC;
+    border-radius: var(--formxr-quest-border-radius);
+    font-size: 1rem;
+    line-height: 1.5;
+    transition: all 0.3s ease;
+    background: white;
+    color: #0D152C;
+}
+
+.formxr-input:focus,
+.formxr-select:focus,
+.formxr-textarea:focus {
+    outline: none;
+    border-color: var(--formxr-quest-primary);
+    box-shadow: 0 0 0 3px rgba(42, 172, 226, 0.1);
+}
+
+.formxr-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* ================================
+   RADIO AND CHECKBOX GROUPS
+================================ */
+
+.formxr-radio-group,
+.formxr-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.formxr-radio-option,
+.formxr-checkbox-option {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border: 2px solid #E4E9EC;
+    border-radius: var(--formxr-quest-border-radius);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.formxr-radio-option:hover,
+.formxr-checkbox-option:hover {
+    border-color: var(--formxr-quest-primary);
+    background: rgba(42, 172, 226, 0.02);
+}
+
+.formxr-radio-option.selected,
+.formxr-checkbox-option.selected {
+    border-color: var(--formxr-quest-primary);
+    background: rgba(42, 172, 226, 0.05);
+}
+
+.formxr-radio-option input,
+.formxr-checkbox-option input {
+    margin-right: 0.75rem;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--formxr-quest-primary);
+}
+
+.formxr-option-label {
+    flex: 1;
+    font-weight: 500;
+    color: #0D152C;
+}
+
+.formxr-option-description {
+    font-size: 0.9rem;
+    color: #6B7280;
+    margin-top: 0.25rem;
+}
+
+.formxr-option-price {
+    font-weight: 600;
+    color: var(--formxr-quest-highlight);
+    margin-left: 1rem;
+    font-size: 1.1rem;
+}
+
+/* ================================
+   PRICE DISPLAY
+================================ */
+
+.formxr-price-display {
+    background: linear-gradient(135deg, var(--formxr-quest-primary), var(--formxr-quest-secondary));
+    color: white;
+    padding: 1.5rem;
+    border-radius: var(--formxr-quest-border-radius);
+    margin: 1.5rem 0;
+    text-align: center;
+}
+
+.formxr-price-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin-bottom: 0.5rem;
+}
+
+.formxr-price-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.formxr-price-period {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.formxr-price-breakdown {
+    background: white;
+    border: 2px solid #E4E9EC;
+    border-radius: var(--formxr-quest-border-radius);
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.formxr-price-breakdown-title {
+    font-weight: 600;
+    color: #0D152C;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.formxr-price-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #E4E9EC;
+}
+
+.formxr-price-item:last-child {
+    border-bottom: none;
+    font-weight: 600;
+    color: var(--formxr-quest-primary);
+    padding-top: 0.75rem;
+    border-top: 2px solid #E4E9EC;
+}
+
+/* ================================
+   NAVIGATION BUTTONS
+================================ */
+
+.formxr-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #E4E9EC;
+}
+
+.formxr-btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--formxr-quest-border-radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 120px;
+}
+
+.formxr-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.formxr-btn-primary {
+    background: var(--formxr-quest-primary);
+    color: white;
+}
+
+.formxr-btn-primary:hover:not(:disabled) {
+    background: #1B8DB5;
+    transform: translateY(-1px);
+    box-shadow: var(--formxr-quest-shadow);
+}
+
+.formxr-btn-secondary {
+    background: white;
+    color: var(--formxr-quest-primary);
+    border: 2px solid var(--formxr-quest-primary);
+}
+
+.formxr-btn-secondary:hover:not(:disabled) {
+    background: var(--formxr-quest-primary);
+    color: white;
+}
+
+.formxr-btn-success {
+    background: var(--formxr-quest-success);
+    color: white;
+    font-size: 1.1rem;
+    padding: 1rem 2rem;
+}
+
+.formxr-btn-success:hover:not(:disabled) {
+    background: #0E9FB8;
+    transform: translateY(-2px);
+    box-shadow: var(--formxr-quest-shadow-lg);
+}
+
+.formxr-btn-icon {
+    margin-right: 0.5rem;
+}
+
+/* ================================
+   VALIDATION AND ERRORS
+================================ */
+
+.formxr-field.has-error .formxr-input,
+.formxr-field.has-error .formxr-select,
+.formxr-field.has-error .formxr-textarea {
+    border-color: var(--formxr-quest-warning);
+    box-shadow: 0 0 0 3px rgba(239, 70, 129, 0.1);
+}
+
+.formxr-error-message {
+    color: var(--formxr-quest-warning);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.formxr-error-message::before {
+    content: '⚠️';
+    margin-right: 0.5rem;
+}
+
+.formxr-validation-summary {
+    background: rgba(239, 70, 129, 0.1);
+    border: 1px solid var(--formxr-quest-warning);
+    border-radius: var(--formxr-quest-border-radius);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.formxr-validation-title {
+    color: var(--formxr-quest-warning);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.formxr-validation-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.formxr-validation-list li {
+    color: var(--formxr-quest-warning);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.formxr-validation-list li::before {
+    content: '• ';
+    margin-right: 0.5rem;
+}
+
+/* ================================
+   SUCCESS AND COMPLETION
+================================ */
+
+.formxr-success-message {
+    text-align: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, var(--formxr-quest-success), var(--formxr-quest-primary));
+    color: white;
+    border-radius: var(--formxr-quest-border-radius);
+    margin: 1rem 0;
+}
+
+.formxr-success-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.formxr-success-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.formxr-success-description {
+    opacity: 0.9;
+    line-height: 1.5;
+}
+
+/* ================================
+   LOADING STATES
+================================ */
+
+.formxr-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.formxr-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+    animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+    100% {
+        left: 100%;
+    }
+}
+
+.formxr-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #E4E9EC;
+    border-top: 2px solid var(--formxr-quest-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 0.5rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ================================
+   ANIMATIONS
+================================ */
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.formxr-fade-in {
+    animation: fadeInUp 0.4s ease-out;
+}
+
+.formxr-slide-right {
+    animation: slideInRight 0.4s ease-out;
+}
+
+.formxr-slide-left {
+    animation: slideInLeft 0.4s ease-out;
+}
+
+/* ================================
+   RESPONSIVE DESIGN
+================================ */
+
+@media (max-width: 768px) {
+    .formxr-questionnaire {
+        margin: 1rem;
+        padding: 1rem;
+    }
+    
+    .formxr-questionnaire-title {
+        font-size: 1.5rem;
+    }
+    
+    .formxr-step-title {
+        font-size: 1.25rem;
+    }
+    
+    .formxr-navigation {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .formxr-btn {
+        width: 100%;
+    }
+    
+    .formxr-radio-option,
+    .formxr-checkbox-option {
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+    }
+    
+    .formxr-option-price {
+        margin-left: 0;
+        margin-top: 0.5rem;
+        align-self: flex-end;
+    }
+    
+    .formxr-progress-steps {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .formxr-progress-step {
+        flex: none;
+        min-width: calc(50% - 0.25rem);
+    }
+    
+    .formxr-progress-step:not(:last-child)::after {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .formxr-questionnaire {
+        margin: 0.5rem;
+        padding: 0.75rem;
+    }
+    
+    .formxr-price-amount {
+        font-size: 1.5rem;
+    }
+    
+    .formxr-progress-step {
+        min-width: 100%;
+    }
+    
+    .formxr-question-group {
+        padding: 1rem;
+    }
+}
+
+/* ================================
+   ACCESSIBILITY
+================================ */
+
+.formxr-questionnaire *:focus {
+    outline: 2px solid var(--formxr-quest-primary);
+    outline-offset: 2px;
+}
+
+.formxr-screen-reader-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .formxr-questionnaire *,
+    .formxr-questionnaire *::before,
+    .formxr-questionnaire *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ================================
+   PRINT STYLES
+================================ */
+
+@media print {
+    .formxr-questionnaire {
+        box-shadow: none;
+        border: 1px solid #E4E9EC;
+    }
+    
+    .formxr-navigation,
+    .formxr-btn {
+        display: none !important;
+    }
+    
+    .formxr-step {
+        display: block !important;
+        page-break-after: always;
+    }
+    
+    .formxr-step:last-child {
+        page-break-after: auto;
+    }
+}

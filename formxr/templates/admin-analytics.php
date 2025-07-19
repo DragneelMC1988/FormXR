@@ -46,8 +46,8 @@ $completed_submissions = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}for
 
 // Get top performing questionnaires
 $top_questionnaires = $wpdb->get_results($wpdb->prepare("
-    SELECT q.id, q.title, q.price, COUNT(s.id) as submission_count, 
-           (q.price * COUNT(s.id)) as total_revenue
+    SELECT q.id, q.title, COUNT(s.id) as submission_count, 
+           COALESCE(SUM(s.calculated_price), 0) as total_revenue
     FROM {$wpdb->prefix}formxr_questionnaires q
     LEFT JOIN {$wpdb->prefix}formxr_submissions s ON q.id = s.questionnaire_id 
     AND DATE(s.submitted_at) BETWEEN %s AND %s
@@ -75,9 +75,8 @@ $status_breakdown = $wpdb->get_results($wpdb->prepare("
 
 // Calculate revenue
 $total_revenue = $wpdb->get_var($wpdb->prepare("
-    SELECT SUM(q.price)
+    SELECT SUM(s.calculated_price)
     FROM {$wpdb->prefix}formxr_submissions s
-    LEFT JOIN {$wpdb->prefix}formxr_questionnaires q ON s.questionnaire_id = q.id
     WHERE s.status = 'completed' AND DATE(s.submitted_at) BETWEEN %s AND %s
 ", $start_date, $end_date));
 
@@ -273,10 +272,10 @@ $submission_change = $previous_submissions > 0 ? (($total_submissions - $previou
                                     </div>
                                 </td>
                                 <td>
-                                    <?php if ($questionnaire->price > 0) : ?>
-                                        <span class="formxr-price">$<?php echo number_format($questionnaire->price, 2); ?></span>
+                                    <?php if (($questionnaire->total_revenue ?? 0) > 0) : ?>
+                                        <span class="formxr-price">$<?php echo number_format($questionnaire->total_revenue ?? 0, 2); ?></span>
                                     <?php else : ?>
-                                        <span class="formxr-text-muted"><?php _e('Free', 'formxr'); ?></span>
+                                        <span class="formxr-text-muted"><?php _e('$0.00', 'formxr'); ?></span>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -285,7 +284,7 @@ $submission_change = $previous_submissions > 0 ? (($total_submissions - $previou
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="formxr-revenue">$<?php echo number_format($questionnaire->total_revenue, 2); ?></span>
+                                    <span class="formxr-revenue">$<?php echo number_format($questionnaire->total_revenue ?? 0, 2); ?></span>
                                 </td>
                                 <td>
                                     <div class="formxr-table-actions">

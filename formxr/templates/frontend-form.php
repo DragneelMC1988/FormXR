@@ -53,15 +53,15 @@ foreach ($steps as $step) {
 $currency = get_option('formxr_currency', 'EUR');
 $base_price = get_option('formxr_base_price', 500);
 $enable_email = get_option('formxr_enable_email_collection', 1);
-$show_price_progress = get_option('formxr_show_price_progress', 1);
+$show_price_progress = get_option('formxr_show_price_progress', 1) && ($questionnaire->pricing_enabled && $questionnaire->show_price_frontend);
 $allow_price_toggle = get_option('formxr_allow_price_type_toggle', 1);
 $default_price_type = get_option('formxr_default_price_type', 'monthly');
 ?>
 
-<div class="formxr-form-container" id="formxr-form-container" x-data="formxrForm()">
-    <div class="formxr-form-header">
-        <h2 class="formxr-form-title"><?php echo esc_html($questionnaire->title); ?></h2>
-        <p class="formxr-form-description"><?php echo esc_html($questionnaire->description); ?></p>
+<div class="formxr-questionnaire" id="formxr-form-container" x-data="formxrForm()">
+    <div class="formxr-questionnaire-header">
+        <h2 class="formxr-questionnaire-title"><?php echo esc_html($questionnaire->title); ?></h2>
+        <p class="formxr-questionnaire-description"><?php echo esc_html($questionnaire->description); ?></p>
         
         <?php if ($show_price_progress): ?>
             <div class="formxr-price-display">
@@ -81,11 +81,13 @@ $default_price_type = get_option('formxr_default_price_type', 'monthly');
                     <?php endif; ?>
                 </div>
                 
-                <div class="progress-bar">
-                    <div class="progress-fill" :style="'width: ' + progress + '%'"></div>
-                </div>
-                <div class="progress-text">
-                    <span x-text="'Step ' + currentStep + ' of ' + totalSteps">Step 1 of <?php echo count($steps); ?></span>
+                <div class="formxr-progress-container">
+                    <div class="formxr-progress-bar">
+                        <div class="formxr-progress-fill" :style="'width: ' + progress + '%'"></div>
+                    </div>
+                    <div class="formxr-progress-text">
+                        <span x-text="'Step ' + currentStep + ' of ' + totalSteps">Step 1 of <?php echo count($steps); ?></span>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>
@@ -93,16 +95,18 @@ $default_price_type = get_option('formxr_default_price_type', 'monthly');
 
     <form id="formxr-form" class="formxr-multi-step-form" @submit.prevent="submitForm()">
         <?php foreach ($steps as $step_index => $step): ?>
-            <div class="form-step" x-show="currentStep === <?php echo $step_index + 1; ?>">
-                <h3 class="step-title"><?php echo esc_html($step->title); ?></h3>
-                <?php if ($step->description): ?>
-                    <p class="step-description"><?php echo esc_html($step->description); ?></p>
-                <?php endif; ?>
+            <div class="formxr-step" x-show="currentStep === <?php echo $step_index + 1; ?>">
+                <div class="formxr-step-header">
+                    <h3 class="formxr-step-title"><?php echo esc_html($step->title); ?></h3>
+                    <?php if ($step->description): ?>
+                        <p class="formxr-step-description"><?php echo esc_html($step->description); ?></p>
+                    <?php endif; ?>
+                </div>
                 
                 <?php if (isset($questions_by_step[$step->id])): ?>
                     <?php foreach ($questions_by_step[$step->id] as $question): ?>
-                        <div class="question-wrapper">
-                            <label class="question-label">
+                        <div class="formxr-field">
+                            <label class="formxr-field-label">
                                 <?php echo esc_html($question->question_text); ?>
                                 <?php if ($question->is_required): ?>
                                     <span class="required">*</span>
@@ -115,15 +119,15 @@ $default_price_type = get_option('formxr_default_price_type', 'monthly');
                             
                             switch ($question->question_type) {
                                 case 'text':
-                                    echo '<input type="text" name="' . $question_name . '" class="form-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
+                                    echo '<input type="text" name="' . $question_name . '" class="formxr-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
                                     break;
                                     
                                 case 'textarea':
-                                    echo '<textarea name="' . $question_name . '" class="form-textarea" rows="4" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '></textarea>';
+                                    echo '<textarea name="' . $question_name . '" class="formxr-textarea" rows="4" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '></textarea>';
                                     break;
                                     
                                 case 'select':
-                                    echo '<select name="' . $question_name . '" class="form-select" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
+                                    echo '<select name="' . $question_name . '" class="formxr-select" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
                                     echo '<option value="">Choose an option...</option>';
                                     foreach ($options as $option) {
                                         echo '<option value="' . esc_attr($option['value']) . '">' . esc_html($option['label']) . '</option>';
@@ -132,29 +136,33 @@ $default_price_type = get_option('formxr_default_price_type', 'monthly');
                                     break;
                                     
                                 case 'radio':
+                                    echo '<div class="formxr-radio-group">';
                                     foreach ($options as $option) {
-                                        echo '<div class="radio-option">';
+                                        echo '<div class="formxr-radio-option">';
                                         echo '<input type="radio" name="' . $question_name . '" value="' . esc_attr($option['value']) . '" id="' . $question_name . '_' . $option['value'] . '" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
-                                        echo '<label for="' . $question_name . '_' . $option['value'] . '">' . esc_html($option['label']) . '</label>';
+                                        echo '<label for="' . $question_name . '_' . $option['value'] . '" class="formxr-option-label">' . esc_html($option['label']) . '</label>';
                                         echo '</div>';
                                     }
+                                    echo '</div>';
                                     break;
                                     
                                 case 'checkbox':
+                                    echo '<div class="formxr-checkbox-group">';
                                     foreach ($options as $option) {
-                                        echo '<div class="checkbox-option">';
+                                        echo '<div class="formxr-checkbox-option">';
                                         echo '<input type="checkbox" name="' . $question_name . '[]" value="' . esc_attr($option['value']) . '" id="' . $question_name . '_' . $option['value'] . '">';
-                                        echo '<label for="' . $question_name . '_' . $option['value'] . '">' . esc_html($option['label']) . '</label>';
+                                        echo '<label for="' . $question_name . '_' . $option['value'] . '" class="formxr-option-label">' . esc_html($option['label']) . '</label>';
                                         echo '</div>';
                                     }
+                                    echo '</div>';
                                     break;
                                     
                                 case 'number':
-                                    echo '<input type="number" name="' . $question_name . '" class="form-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
+                                    echo '<input type="number" name="' . $question_name . '" class="formxr-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
                                     break;
                                     
                                 case 'email':
-                                    echo '<input type="email" name="' . $question_name . '" class="form-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
+                                    echo '<input type="email" name="' . $question_name . '" class="formxr-input" x-model="formData.' . $question_name . '"' . ($question->is_required ? ' required' : '') . '>';
                                     break;
                             }
                             ?>
@@ -162,23 +170,31 @@ $default_price_type = get_option('formxr_default_price_type', 'monthly');
                     <?php endforeach; ?>
                 <?php endif; ?>
                 
-                <div class="step-navigation">
+                <div class="formxr-navigation">
                     <?php if ($step_index > 0): ?>
-                        <button type="button" @click="previousStep()" class="btn btn-secondary">Previous</button>
+                        <button type="button" @click="previousStep()" class="formxr-btn formxr-btn-secondary">
+                            <span class="formxr-btn-icon">←</span>Previous
+                        </button>
                     <?php endif; ?>
                     
                     <?php if ($step_index < count($steps) - 1): ?>
-                        <button type="button" @click="nextStep()" class="btn btn-primary">Next</button>
+                        <button type="button" @click="nextStep()" class="formxr-btn formxr-btn-primary">
+                            Next<span class="formxr-btn-icon">→</span>
+                        </button>
                     <?php else: ?>
                         <?php if ($enable_email): ?>
-                            <div class="email-field">
-                                <label for="customer_email">Email Address *</label>
-                                <input type="email" name="customer_email" id="customer_email" x-model="formData.customer_email" required class="form-input">
+                            <div class="formxr-field">
+                                <label for="customer_email" class="formxr-field-label">Email Address <span class="required">*</span></label>
+                                <input type="email" name="customer_email" id="customer_email" x-model="formData.customer_email" required class="formxr-input">
                             </div>
                         <?php endif; ?>
-                        <button type="submit" class="btn btn-success" :disabled="submitting">
-                            <span x-show="!submitting">Submit</span>
-                            <span x-show="submitting">Submitting...</span>
+                        <button type="submit" class="formxr-btn formxr-btn-success" :disabled="submitting">
+                            <span x-show="!submitting">
+                                <span class="formxr-btn-icon">✓</span>Submit
+                            </span>
+                            <span x-show="submitting">
+                                <div class="formxr-spinner"></div>Submitting...
+                            </span>
                         </button>
                     <?php endif; ?>
                 </div>
@@ -435,22 +451,7 @@ function formxrForm() {
     }
 }
 </script>
-                        <div class="price-type-toggle">
-                            <label class="toggle-switch">
-                                <input type="radio" name="price_type" value="monthly" <?php checked($default_price_type, 'monthly'); ?>>
-                                <span>Monthly</span>
-                            </label>
-                            <label class="toggle-switch">
-                                <input type="radio" name="price_type" value="onetime" <?php checked($default_price_type, 'onetime'); ?>>
-                                <span>One-time</span>
-                            </label>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        <?php endif; ?>
-    </div>
-    
+
     <?php if (!empty($steps)): ?>
         <form id="exseo-form" class="exseo-multi-step-form">
             <?php wp_nonce_field('exseo_form_submit', 'exseo_form_nonce'); ?>
@@ -690,3 +691,23 @@ function formxrForm() {
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+// Handle show_price_frontend setting
+if (typeof formxr_config !== 'undefined' && formxr_config.show_price_frontend !== undefined) {
+    // Override the show_price_progress if show_price_frontend is disabled
+    if (!formxr_config.show_price_frontend) {
+        // Hide all price-related elements
+        const priceElements = document.querySelectorAll('.exseo-price-progress, .success-price, .exseo-price-display');
+        priceElements.forEach(element => {
+            element.style.display = 'none';
+        });
+        
+        // Override the show_price_progress variable in the form data
+        const formElement = document.querySelector('[x-data]');
+        if (formElement && formElement._x_dataStack && formElement._x_dataStack[0]) {
+            formElement._x_dataStack[0].show_price_progress = false;
+        }
+    }
+}
+</script>

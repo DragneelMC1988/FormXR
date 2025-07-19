@@ -39,11 +39,13 @@ if (!$questionnaire) {
     return;
 }
 
-// Get questions
+// Get questions through steps
 $questions = $wpdb->get_results($wpdb->prepare("
-    SELECT * FROM {$wpdb->prefix}formxr_questions 
-    WHERE questionnaire_id = %d 
-    ORDER BY order_num ASC
+    SELECT q.*, s.step_number, s.title as step_title 
+    FROM {$wpdb->prefix}formxr_questions q
+    JOIN {$wpdb->prefix}formxr_steps s ON q.step_id = s.id
+    WHERE s.questionnaire_id = %d 
+    ORDER BY s.step_order ASC, q.question_order ASC
 ", $questionnaire_id));
 ?>
 

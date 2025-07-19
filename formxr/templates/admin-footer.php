@@ -25,10 +25,10 @@ if (!defined('ABSPATH')) {
                 <a href="https://expoxr.com" target="_blank" class="formxr-footer-link">
                     <?php _e('ExpoXR.com', 'formxr'); ?>
                 </a>
-                <a href="https://docs.expoxr.com/formxr" target="_blank" class="formxr-footer-link">
+                <a href="https://expoxr.com/formxr" target="_blank" class="formxr-footer-link">
                     <?php _e('Documentation', 'formxr'); ?>
                 </a>
-                <a href="https://support.expoxr.com" target="_blank" class="formxr-footer-link">
+                <a href="https://expoxr.com" target="_blank" class="formxr-footer-link">
                     <?php _e('Support', 'formxr'); ?>
                 </a>
             </div>
@@ -37,7 +37,7 @@ if (!defined('ABSPATH')) {
                 <a href="https://twitter.com/expoxr" target="_blank" class="formxr-social-link" title="Follow us on Twitter">
                     <span class="formxr-social-icon">🐦</span>
                 </a>
-                <a href="https://github.com/expoxr/formxr" target="_blank" class="formxr-social-link" title="View on GitHub">
+                <a href="https://github.com/DragneelMC1988/FormXR" target="_blank" class="formxr-social-link" title="View on GitHub">
                     <span class="formxr-social-icon">🐙</span>
                 </a>
                 <a href="https://linkedin.com/company/expoxr" target="_blank" class="formxr-social-link" title="Connect on LinkedIn">

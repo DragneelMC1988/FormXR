@@ -14,7 +14,7 @@ include_once FORMXR_PLUGIN_DIR . 'templates/admin-header.php';
 global $wpdb;
 $questionnaires_count = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_questionnaires");
 $submissions_count = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_submissions");
-$total_revenue = $wpdb->get_var("SELECT SUM(price) FROM {$wpdb->prefix}formxr_questionnaires");
+$total_revenue = $wpdb->get_var("SELECT SUM(calculated_price) FROM {$wpdb->prefix}formxr_submissions WHERE status = 'completed'");
 $active_questionnaires = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_questionnaires WHERE status = 'active'");
 
 // Recent questionnaires
@@ -122,8 +122,10 @@ $recent_submissions = $wpdb->get_results("
                                         <span class="formxr-badge formxr-badge-<?php echo $questionnaire->status === 'active' ? 'success' : 'secondary'; ?>">
                                             <?php echo ucfirst($questionnaire->status); ?>
                                         </span>
-                                        <?php if ($questionnaire->price > 0) : ?>
-                                            <span class="formxr-questionnaire-price">$<?php echo number_format($questionnaire->price, 2); ?></span>
+                                        <?php if (isset($questionnaire->base_price) && $questionnaire->base_price > 0) : ?>
+                                            <span class="formxr-questionnaire-price">$<?php echo number_format($questionnaire->base_price, 2); ?></span>
+                                        <?php elseif (isset($questionnaire->pricing_enabled) && $questionnaire->pricing_enabled) : ?>
+                                            <span class="formxr-questionnaire-price"><?php _e('Variable', 'formxr'); ?></span>
                                         <?php endif; ?>
                                         <span class="formxr-text-muted"><?php echo human_time_diff(strtotime($questionnaire->created_at), current_time('timestamp')) . ' ago'; ?></span>
                                     </div>
