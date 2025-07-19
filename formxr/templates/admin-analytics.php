@@ -1,229 +1,510 @@
 <?php
+/**
+ * Admin Analytics Template
+ * Complete rewrite with consistent header/footer structure
+ */
 if (!defined('ABSPATH')) {
     exit;
 }
 
+// Include header
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-header.php';
+
 global $wpdb;
-$submissions_table = $wpdb->prefix . 'formxr_submissions';
-$questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+
+// Get date range from URL parameters
+$date_range = isset($_GET['range']) ? sanitize_text_field($_GET['range']) : '30';
+$start_date = '';
+$end_date = date('Y-m-d');
+
+switch ($date_range) {
+    case '7':
+        $start_date = date('Y-m-d', strtotime('-7 days'));
+        break;
+    case '30':
+        $start_date = date('Y-m-d', strtotime('-30 days'));
+        break;
+    case '90':
+        $start_date = date('Y-m-d', strtotime('-90 days'));
+        break;
+    case '365':
+        $start_date = date('Y-m-d', strtotime('-365 days'));
+        break;
+    case 'all':
+        $start_date = '2020-01-01'; // Far enough back
+        break;
+    default:
+        $start_date = date('Y-m-d', strtotime('-30 days'));
+        break;
+}
 
 // Get analytics data
-$total_submissions = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table");
-$questionnaires_count = $wpdb->get_var("SELECT COUNT(*) FROM $questionnaires_table");
+$total_questionnaires = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_questionnaires");
+$active_questionnaires = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_questionnaires WHERE status = 'active'");
+$total_submissions = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_submissions WHERE DATE(submitted_at) BETWEEN '$start_date' AND '$end_date'");
+$completed_submissions = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}formxr_submissions WHERE status = 'completed' AND DATE(submitted_at) BETWEEN '$start_date' AND '$end_date'");
 
-// Time-based analytics
-$submissions_today = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE DATE(submitted_at) = CURDATE()");
-$submissions_yesterday = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE DATE(submitted_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)");
-$submissions_week = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
-$submissions_month = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
-$submissions_last_month = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 60 DAY) AND submitted_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
-
-// Revenue analytics
-$total_revenue_potential = $wpdb->get_var("SELECT SUM(calculated_price) FROM $submissions_table");
-$avg_price = $wpdb->get_var("SELECT AVG(calculated_price) FROM $submissions_table");
-$highest_price = $wpdb->get_var("SELECT MAX(calculated_price) FROM $submissions_table");
-$lowest_price = $wpdb->get_var("SELECT MIN(calculated_price) FROM $submissions_table");
-
-// Monthly revenue potential
-$monthly_revenue = $wpdb->get_var("SELECT SUM(calculated_price) FROM $submissions_table WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
-$last_month_revenue = $wpdb->get_var("SELECT SUM(calculated_price) FROM $submissions_table WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 60 DAY) AND submitted_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
-
-// Pricing type distribution
-$monthly_pricing = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE price_type = 'monthly'");
-$onetime_pricing = $wpdb->get_var("SELECT COUNT(*) FROM $submissions_table WHERE price_type = 'onetime'");
-
-// Calculate changes
-$submissions_change = $submissions_last_month > 0 ? (($submissions_month - $submissions_last_month) / $submissions_last_month) * 100 : 0;
-$revenue_change = $last_month_revenue > 0 ? (($monthly_revenue - $last_month_revenue) / $last_month_revenue) * 100 : 0;
-$avg_change = $submissions_yesterday > 0 ? (($submissions_today - $submissions_yesterday) / $submissions_yesterday) * 100 : 0;
-
-// Top performing questionnaires
-$top_questionnaires = $wpdb->get_results("
-    SELECT q.title, COUNT(s.id) as submission_count, AVG(s.calculated_price) as avg_price
-    FROM $questionnaires_table q
-    LEFT JOIN $submissions_table s ON q.id = s.questionnaire_id
+// Get top performing questionnaires
+$top_questionnaires = $wpdb->get_results($wpdb->prepare("
+    SELECT q.id, q.title, q.price, COUNT(s.id) as submission_count, 
+           (q.price * COUNT(s.id)) as total_revenue
+    FROM {$wpdb->prefix}formxr_questionnaires q
+    LEFT JOIN {$wpdb->prefix}formxr_submissions s ON q.id = s.questionnaire_id 
+    AND DATE(s.submitted_at) BETWEEN %s AND %s
     GROUP BY q.id
     ORDER BY submission_count DESC
-    LIMIT 5
-");
+    LIMIT 10
+", $start_date, $end_date));
+
+// Get daily submission data for chart
+$daily_data = $wpdb->get_results($wpdb->prepare("
+    SELECT DATE(submitted_at) as date, COUNT(*) as count
+    FROM {$wpdb->prefix}formxr_submissions
+    WHERE DATE(submitted_at) BETWEEN %s AND %s
+    GROUP BY DATE(submitted_at)
+    ORDER BY date ASC
+", $start_date, $end_date));
+
+// Get submission status breakdown
+$status_breakdown = $wpdb->get_results($wpdb->prepare("
+    SELECT status, COUNT(*) as count
+    FROM {$wpdb->prefix}formxr_submissions
+    WHERE DATE(submitted_at) BETWEEN %s AND %s
+    GROUP BY status
+", $start_date, $end_date));
+
+// Calculate revenue
+$total_revenue = $wpdb->get_var($wpdb->prepare("
+    SELECT SUM(q.price)
+    FROM {$wpdb->prefix}formxr_submissions s
+    LEFT JOIN {$wpdb->prefix}formxr_questionnaires q ON s.questionnaire_id = q.id
+    WHERE s.status = 'completed' AND DATE(s.submitted_at) BETWEEN %s AND %s
+", $start_date, $end_date));
+
+$total_revenue = $total_revenue ? $total_revenue : 0;
+
+// Calculate conversion rate
+$conversion_rate = $total_submissions > 0 ? ($completed_submissions / $total_submissions) * 100 : 0;
+
+// Get previous period for comparison
+$previous_start = date('Y-m-d', strtotime($start_date . ' -' . $date_range . ' days'));
+$previous_end = date('Y-m-d', strtotime($end_date . ' -' . $date_range . ' days'));
+
+$previous_submissions = $wpdb->get_var($wpdb->prepare("
+    SELECT COUNT(*) FROM {$wpdb->prefix}formxr_submissions 
+    WHERE DATE(submitted_at) BETWEEN %s AND %s
+", $previous_start, $previous_end));
+
+$submission_change = $previous_submissions > 0 ? (($total_submissions - $previous_submissions) / $previous_submissions) * 100 : 0;
 ?>
 
-<div class="wrap formxr-container">
+<div class="formxr-admin-wrap">
+    <!-- Page Header -->
     <div class="formxr-page-header">
-        <div class="formxr-page-title">
-            <h1>
-                <span class="dashicons dashicons-chart-bar"></span>
-                <?php _e('Analytics & Insights', 'formxr'); ?>
+        <div class="formxr-page-header-content">
+            <h1 class="formxr-page-title">
+                <span class="formxr-page-icon">📈</span>
+                <?php _e('Analytics', 'formxr'); ?>
             </h1>
-            <div class="formxr-header-actions">
-                <a href="<?php echo admin_url('admin-ajax.php?action=formxr_export_csv'); ?>" class="btn-formxr">
-                    <span class="dashicons dashicons-download"></span>
-                    <?php _e('Export Data', 'formxr'); ?>
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="btn-formxr btn-outline">
-                    <span class="dashicons dashicons-plus-alt"></span>
-                    <?php _e('New Form', 'formxr'); ?>
-                </a>
-            </div>
+            <p class="formxr-page-subtitle">
+                <?php _e('Track your questionnaire performance and submission trends', 'formxr'); ?>
+            </p>
+        </div>
+        <div class="formxr-page-actions">
+            <a href="<?php echo admin_url('admin.php?page=formxr-submissions'); ?>" class="formxr-btn formxr-btn-secondary">
+                <span class="formxr-btn-icon">📊</span>
+                <?php _e('View Submissions', 'formxr'); ?>
+            </a>
         </div>
     </div>
 
-    <div class="formxr-dashboard-grid">
-        <!-- Key Metrics -->
-        <div class="formxr-card metric-card submissions-metric">
-            <div class="formxr-card-body">
-                <div class="metric-number"><?php echo number_format($total_submissions); ?></div>
-                <div class="metric-label"><?php _e('Total Submissions', 'formxr'); ?></div>
-                <div class="metric-change <?php echo $submissions_change >= 0 ? 'positive' : 'negative'; ?>">
-                    <?php echo $submissions_change >= 0 ? '+' : ''; ?><?php echo number_format($submissions_change, 1); ?>% <?php _e('vs last month', 'formxr'); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="formxr-card metric-card revenue-metric">
-            <div class="formxr-card-body">
-                <div class="metric-number">$<?php echo number_format($total_revenue_potential ?: 0, 0); ?></div>
-                <div class="metric-label"><?php _e('Revenue Potential', 'formxr'); ?></div>
-                <div class="metric-change <?php echo $revenue_change >= 0 ? 'positive' : 'negative'; ?>">
-                    <?php echo $revenue_change >= 0 ? '+' : ''; ?><?php echo number_format($revenue_change, 1); ?>% <?php _e('this month', 'formxr'); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="formxr-card metric-card average-metric">
-            <div class="formxr-card-body">
-                <div class="metric-number">$<?php echo number_format($avg_price ?: 0, 0); ?></div>
-                <div class="metric-label"><?php _e('Average Quote', 'formxr'); ?></div>
-                <div class="metric-change <?php echo $avg_change >= 0 ? 'positive' : 'negative'; ?>">
-                    <?php echo $avg_change >= 0 ? '+' : ''; ?><?php echo number_format($avg_change, 1); ?>% <?php _e('vs yesterday', 'formxr'); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="formxr-card metric-card conversion-metric">
-            <div class="formxr-card-body">
-                <div class="metric-number"><?php echo $questionnaires_count; ?></div>
-                <div class="metric-label"><?php _e('Active Forms', 'formxr'); ?></div>
-                <div class="metric-change neutral">
-                    <?php _e('Currently Active', 'formxr'); ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- Top Performing Questionnaires -->
-        <div class="formxr-card" style="grid-column: 1 / -1;">
-            <div class="formxr-card-header">
-                <h2><?php _e('Top Performing Forms', 'formxr'); ?></h2>
-                <p><?php _e('Forms with the most submissions', 'formxr'); ?></p>
-            </div>
-            <div class="formxr-card-body">
-                <?php if (!empty($top_questionnaires)): ?>
-                    <div class="questionnaire-performance">
-                        <?php foreach ($top_questionnaires as $questionnaire): ?>
-                            <div class="questionnaire-item">
-                                <div class="questionnaire-info">
-                                    <h4><?php echo esc_html($questionnaire->title); ?></h4>
-                                    <div class="questionnaire-stats">
-                                        <span><?php echo $questionnaire->submission_count; ?> <?php _e('submissions', 'formxr'); ?></span>
-                                        <span>$<?php echo number_format($questionnaire->avg_price ?: 0, 0); ?> <?php _e('avg', 'formxr'); ?></span>
-                                    </div>
-                                </div>
-                                <div class="performance-bar">
-                                    <?php 
-                                    $total_max = $top_questionnaires[0]->submission_count;
-                                    $percentage = $total_max > 0 ? ($questionnaire->submission_count / $total_max) * 100 : 0;
-                                    ?>
-                                    <div class="bar-fill" style="width: <?php echo $percentage; ?>%"></div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php else: ?>
-                    <div class="no-data">
-                        <p><?php _e('No questionnaire data available yet.', 'formxr'); ?></p>
-                        <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="btn-formxr">
-                            <?php _e('Create Your First Form', 'formxr'); ?>
-                        </a>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Revenue Insights -->
-        <div class="formxr-card">
-            <div class="formxr-card-header">
-                <h2><?php _e('Revenue Insights', 'formxr'); ?></h2>
-                <p><?php _e('Price range analysis', 'formxr'); ?></p>
-            </div>
-            <div class="formxr-card-body">
-                <?php if ($total_submissions > 0): ?>
-                    <div class="revenue-stats">
-                        <div class="stat-row">
-                            <span class="stat-label"><?php _e('Highest Quote:', 'formxr'); ?></span>
-                            <span class="stat-value">$<?php echo number_format($highest_price ?: 0, 0); ?></span>
-                        </div>
-                        <div class="stat-row">
-                            <span class="stat-label"><?php _e('Lowest Quote:', 'formxr'); ?></span>
-                            <span class="stat-value">$<?php echo number_format($lowest_price ?: 0, 0); ?></span>
-                        </div>
-                        <div class="stat-row highlight">
-                            <span class="stat-label"><?php _e('This Month:', 'formxr'); ?></span>
-                            <span class="stat-value">$<?php echo number_format($monthly_revenue ?: 0, 0); ?></span>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <div class="no-data">
-                        <p><?php _e('No revenue data available yet.', 'formxr'); ?></p>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Pricing Type Distribution -->
-        <div class="formxr-card">
-            <div class="formxr-card-header">
-                <h2><?php _e('Pricing Types', 'formxr'); ?></h2>
-                <p><?php _e('Distribution of pricing preferences', 'formxr'); ?></p>
-            </div>
-            <div class="formxr-card-body">
-                <div class="pricing-distribution">
-                    <div class="pricing-type-card monthly-card">
-                        <h3><?php echo $monthly_pricing; ?></h3>
-                        <p><?php _e('Monthly Pricing', 'formxr'); ?></p>
-                    </div>
-                    <div class="pricing-type-card onetime-card">
-                        <h3><?php echo $onetime_pricing; ?></h3>
-                        <p><?php _e('One-time Pricing', 'formxr'); ?></p>
-                    </div>
+    <!-- Date Range Filter -->
+    <div class="formxr-section">
+        <div class="formxr-filters">
+            <div class="formxr-filter-group">
+                <label class="formxr-filter-label">
+                    <?php _e('Date Range:', 'formxr'); ?>
+                </label>
+                <div class="formxr-button-group">
+                    <a href="<?php echo admin_url('admin.php?page=formxr-analytics&range=7'); ?>" 
+                       class="formxr-btn <?php echo $date_range == '7' ? 'formxr-btn-primary' : 'formxr-btn-secondary'; ?>">
+                        <?php _e('7 Days', 'formxr'); ?>
+                    </a>
+                    <a href="<?php echo admin_url('admin.php?page=formxr-analytics&range=30'); ?>" 
+                       class="formxr-btn <?php echo $date_range == '30' ? 'formxr-btn-primary' : 'formxr-btn-secondary'; ?>">
+                        <?php _e('30 Days', 'formxr'); ?>
+                    </a>
+                    <a href="<?php echo admin_url('admin.php?page=formxr-analytics&range=90'); ?>" 
+                       class="formxr-btn <?php echo $date_range == '90' ? 'formxr-btn-primary' : 'formxr-btn-secondary'; ?>">
+                        <?php _e('90 Days', 'formxr'); ?>
+                    </a>
+                    <a href="<?php echo admin_url('admin.php?page=formxr-analytics&range=365'); ?>" 
+                       class="formxr-btn <?php echo $date_range == '365' ? 'formxr-btn-primary' : 'formxr-btn-secondary'; ?>">
+                        <?php _e('1 Year', 'formxr'); ?>
+                    </a>
+                    <a href="<?php echo admin_url('admin.php?page=formxr-analytics&range=all'); ?>" 
+                       class="formxr-btn <?php echo $date_range == 'all' ? 'formxr-btn-primary' : 'formxr-btn-secondary'; ?>">
+                        <?php _e('All Time', 'formxr'); ?>
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Quick Actions Section -->
+    <!-- Key Metrics Section -->
     <div class="formxr-section">
         <div class="formxr-section-header">
-            <h2>
-                <span class="dashicons dashicons-admin-tools"></span>
-                <?php _e('Quick Actions', 'formxr'); ?>
-            </h2>
+            <h2 class="formxr-section-title"><?php _e('Key Metrics', 'formxr'); ?></h2>
         </div>
-        <div class="formxr-section-content">
-            <div class="formxr-actions-grid">
-                <a href="<?php echo admin_url('admin-ajax.php?action=formxr_export_csv'); ?>" class="btn-formxr">
-                    <span class="dashicons dashicons-download"></span>
-                    <?php _e('Export All Data', 'formxr'); ?>
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=formxr-submissions'); ?>" class="btn-formxr btn-outline">
-                    <span class="dashicons dashicons-visibility"></span>
-                    <?php _e('View Submissions', 'formxr'); ?>
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=formxr-settings'); ?>" class="btn-formxr btn-green">
-                    <span class="dashicons dashicons-admin-settings"></span>
-                    <?php _e('Adjust Settings', 'formxr'); ?>
-                </a>
+        <div class="formxr-grid formxr-grid-4">
+            <div class="formxr-stat-card formxr-stat-card-primary">
+                <div class="formxr-stat-icon">📊</div>
+                <div class="formxr-stat-content">
+                    <div class="formxr-stat-number"><?php echo number_format($total_submissions); ?></div>
+                    <div class="formxr-stat-label"><?php _e('Total Submissions', 'formxr'); ?></div>
+                    <?php if ($submission_change != 0) : ?>
+                        <div class="formxr-stat-change <?php echo $submission_change > 0 ? 'positive' : 'negative'; ?>">
+                            <?php echo $submission_change > 0 ? '↗' : '↘'; ?> <?php echo abs(round($submission_change, 1)); ?>%
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            
+            <div class="formxr-stat-card formxr-stat-card-success">
+                <div class="formxr-stat-icon">✅</div>
+                <div class="formxr-stat-content">
+                    <div class="formxr-stat-number"><?php echo number_format($completed_submissions); ?></div>
+                    <div class="formxr-stat-label"><?php _e('Completed', 'formxr'); ?></div>
+                </div>
+            </div>
+            
+            <div class="formxr-stat-card formxr-stat-card-info">
+                <div class="formxr-stat-icon">🎯</div>
+                <div class="formxr-stat-content">
+                    <div class="formxr-stat-number"><?php echo round($conversion_rate, 1); ?>%</div>
+                    <div class="formxr-stat-label"><?php _e('Completion Rate', 'formxr'); ?></div>
+                </div>
+            </div>
+            
+            <div class="formxr-stat-card formxr-stat-card-warning">
+                <div class="formxr-stat-icon">💰</div>
+                <div class="formxr-stat-content">
+                    <div class="formxr-stat-number">$<?php echo number_format($total_revenue, 2); ?></div>
+                    <div class="formxr-stat-label"><?php _e('Revenue', 'formxr'); ?></div>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Charts Section -->
+    <div class="formxr-grid formxr-grid-2">
+        <!-- Submissions Over Time Chart -->
+        <div class="formxr-widget">
+            <div class="formxr-widget-header">
+                <h3 class="formxr-widget-title">
+                    <span class="formxr-widget-icon">📈</span>
+                    <?php _e('Submissions Over Time', 'formxr'); ?>
+                </h3>
+            </div>
+            <div class="formxr-widget-content">
+                <div class="formxr-chart-container">
+                    <canvas id="submissionsChart" width="400" height="200"></canvas>
+                </div>
+                <?php if (empty($daily_data)) : ?>
+                    <div class="formxr-empty-state">
+                        <div class="formxr-empty-icon">📈</div>
+                        <h4><?php _e('No Data Available', 'formxr'); ?></h4>
+                        <p><?php _e('No submissions found for the selected time period.', 'formxr'); ?></p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Status Breakdown Chart -->
+        <div class="formxr-widget">
+            <div class="formxr-widget-header">
+                <h3 class="formxr-widget-title">
+                    <span class="formxr-widget-icon">🥧</span>
+                    <?php _e('Submission Status', 'formxr'); ?>
+                </h3>
+            </div>
+            <div class="formxr-widget-content">
+                <div class="formxr-chart-container">
+                    <canvas id="statusChart" width="400" height="200"></canvas>
+                </div>
+                <?php if (empty($status_breakdown)) : ?>
+                    <div class="formxr-empty-state">
+                        <div class="formxr-empty-icon">🥧</div>
+                        <h4><?php _e('No Data Available', 'formxr'); ?></h4>
+                        <p><?php _e('No submissions found for the selected time period.', 'formxr'); ?></p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Performing Questionnaires -->
+    <div class="formxr-section">
+        <div class="formxr-section-header">
+            <h2 class="formxr-section-title"><?php _e('Top Performing Questionnaires', 'formxr'); ?></h2>
+        </div>
+        
+        <?php if (!empty($top_questionnaires)) : ?>
+            <div class="formxr-table-responsive">
+                <table class="formxr-table">
+                    <thead>
+                        <tr>
+                            <th><?php _e('Questionnaire', 'formxr'); ?></th>
+                            <th><?php _e('Price', 'formxr'); ?></th>
+                            <th><?php _e('Submissions', 'formxr'); ?></th>
+                            <th><?php _e('Revenue', 'formxr'); ?></th>
+                            <th><?php _e('Actions', 'formxr'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($top_questionnaires as $index => $questionnaire) : ?>
+                            <tr>
+                                <td>
+                                    <div class="formxr-rank-item">
+                                        <span class="formxr-rank">#<?php echo $index + 1; ?></span>
+                                        <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=edit&id=' . $questionnaire->id); ?>" class="formxr-table-link">
+                                            <?php echo esc_html($questionnaire->title); ?>
+                                        </a>
+                                    </div>
+                                </td>
+                                <td>
+                                    <?php if ($questionnaire->price > 0) : ?>
+                                        <span class="formxr-price">$<?php echo number_format($questionnaire->price, 2); ?></span>
+                                    <?php else : ?>
+                                        <span class="formxr-text-muted"><?php _e('Free', 'formxr'); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="formxr-badge formxr-badge-primary">
+                                        <?php echo number_format($questionnaire->submission_count); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="formxr-revenue">$<?php echo number_format($questionnaire->total_revenue, 2); ?></span>
+                                </td>
+                                <td>
+                                    <div class="formxr-table-actions">
+                                        <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=edit&id=' . $questionnaire->id); ?>" 
+                                           class="formxr-btn formxr-btn-sm formxr-btn-secondary">
+                                            <?php _e('Edit', 'formxr'); ?>
+                                        </a>
+                                        <a href="<?php echo admin_url('admin.php?page=formxr-submissions&questionnaire_id=' . $questionnaire->id); ?>" 
+                                           class="formxr-btn formxr-btn-sm formxr-btn-info">
+                                            <?php _e('View Submissions', 'formxr'); ?>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else : ?>
+            <div class="formxr-empty-state">
+                <div class="formxr-empty-icon">📊</div>
+                <h4><?php _e('No Performance Data', 'formxr'); ?></h4>
+                <p><?php _e('Create some questionnaires and start collecting submissions to see performance analytics.', 'formxr'); ?></p>
+                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="formxr-btn formxr-btn-primary">
+                    <span class="formxr-btn-icon">➕</span>
+                    <?php _e('Create Questionnaire', 'formxr'); ?>
+                </a>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Additional Insights -->
+    <div class="formxr-section">
+        <div class="formxr-section-header">
+            <h2 class="formxr-section-title"><?php _e('Insights & Recommendations', 'formxr'); ?></h2>
+        </div>
+        
+        <div class="formxr-grid formxr-grid-2">
+            <div class="formxr-widget">
+                <div class="formxr-widget-header">
+                    <h3 class="formxr-widget-title">
+                        <span class="formxr-widget-icon">💡</span>
+                        <?php _e('Quick Insights', 'formxr'); ?>
+                    </h3>
+                </div>
+                <div class="formxr-widget-content">
+                    <div class="formxr-insight-list">
+                        <div class="formxr-insight-item">
+                            <div class="formxr-insight-icon">🏆</div>
+                            <div class="formxr-insight-content">
+                                <h4><?php _e('Best Performing Day', 'formxr'); ?></h4>
+                                <p>
+                                    <?php 
+                                    if (!empty($daily_data)) {
+                                        $best_day = array_reduce($daily_data, function($carry, $item) {
+                                            return (!$carry || $item->count > $carry->count) ? $item : $carry;
+                                        });
+                                        echo date('F j, Y', strtotime($best_day->date)) . ' (' . $best_day->count . ' submissions)';
+                                    } else {
+                                        _e('No data available', 'formxr');
+                                    }
+                                    ?>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div class="formxr-insight-item">
+                            <div class="formxr-insight-icon">📊</div>
+                            <div class="formxr-insight-content">
+                                <h4><?php _e('Average Daily Submissions', 'formxr'); ?></h4>
+                                <p>
+                                    <?php 
+                                    $days = max(1, intval($date_range));
+                                    $avg_daily = $total_submissions / $days;
+                                    echo number_format($avg_daily, 1) . ' ' . __('per day', 'formxr');
+                                    ?>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div class="formxr-insight-item">
+                            <div class="formxr-insight-icon">💰</div>
+                            <div class="formxr-insight-content">
+                                <h4><?php _e('Average Revenue per Submission', 'formxr'); ?></h4>
+                                <p>
+                                    <?php 
+                                    $avg_revenue = $completed_submissions > 0 ? $total_revenue / $completed_submissions : 0;
+                                    echo '$' . number_format($avg_revenue, 2);
+                                    ?>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="formxr-widget">
+                <div class="formxr-widget-header">
+                    <h3 class="formxr-widget-title">
+                        <span class="formxr-widget-icon">🎯</span>
+                        <?php _e('Recommendations', 'formxr'); ?>
+                    </h3>
+                </div>
+                <div class="formxr-widget-content">
+                    <div class="formxr-recommendation-list">
+                        <?php if ($conversion_rate < 50) : ?>
+                            <div class="formxr-recommendation-item">
+                                <div class="formxr-recommendation-icon">⚠️</div>
+                                <div class="formxr-recommendation-content">
+                                    <h4><?php _e('Low Completion Rate', 'formxr'); ?></h4>
+                                    <p><?php _e('Your completion rate is below 50%. Consider simplifying your questionnaires or reducing the number of required fields.', 'formxr'); ?></p>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php if ($active_questionnaires < 3) : ?>
+                            <div class="formxr-recommendation-item">
+                                <div class="formxr-recommendation-icon">📝</div>
+                                <div class="formxr-recommendation-content">
+                                    <h4><?php _e('Create More Questionnaires', 'formxr'); ?></h4>
+                                    <p><?php _e('You have fewer than 3 active questionnaires. Creating more diverse questionnaires can help increase engagement.', 'formxr'); ?></p>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php if ($total_submissions > 50 && $total_revenue == 0) : ?>
+                            <div class="formxr-recommendation-item">
+                                <div class="formxr-recommendation-icon">💡</div>
+                                <div class="formxr-recommendation-content">
+                                    <h4><?php _e('Monetization Opportunity', 'formxr'); ?></h4>
+                                    <p><?php _e('You have good submission volume. Consider adding premium questionnaires to generate revenue.', 'formxr'); ?></p>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php if (empty($daily_data)) : ?>
+                            <div class="formxr-recommendation-item">
+                                <div class="formxr-recommendation-icon">🚀</div>
+                                <div class="formxr-recommendation-content">
+                                    <h4><?php _e('Get Started', 'formxr'); ?></h4>
+                                    <p><?php _e('Create your first questionnaire and start collecting valuable feedback from your audience.', 'formxr'); ?></p>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    <?php if (!empty($daily_data)) : ?>
+    // Submissions Over Time Chart
+    const submissionsCtx = document.getElementById('submissionsChart').getContext('2d');
+    new Chart(submissionsCtx, {
+        type: 'line',
+        data: {
+            labels: [<?php echo implode(',', array_map(function($item) { return '"' . date('M j', strtotime($item->date)) . '"'; }, $daily_data)); ?>],
+            datasets: [{
+                label: '<?php _e('Submissions', 'formxr'); ?>',
+                data: [<?php echo implode(',', array_column($daily_data, 'count')); ?>],
+                borderColor: '#2AACE2',
+                backgroundColor: 'rgba(42, 172, 226, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    <?php endif; ?>
     
-</div> <!-- End formxr-container -->
+    <?php if (!empty($status_breakdown)) : ?>
+    // Status Breakdown Chart
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [<?php echo implode(',', array_map(function($item) { return '"' . ucfirst($item->status) . '"'; }, $status_breakdown)); ?>],
+            datasets: [{
+                data: [<?php echo implode(',', array_column($status_breakdown, 'count')); ?>],
+                backgroundColor: ['#2AACE2', '#8062AA', '#F36E24', '#EF4681'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    <?php endif; ?>
+});
+</script>
+
+<?php
+// Include footer
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-footer.php';
+?>

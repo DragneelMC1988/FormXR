@@ -1,568 +1,649 @@
 <?php
+/**
+ * Admin Questionnaire Builder Template
+ * Complete rewrite with consistent header/footer structure
+ */
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit;
 }
 
-// Get questionnaire ID if editing
+// Include header
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-header.php';
+
+global $wpdb;
+
+// Get questionnaire ID
 $questionnaire_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-$questionnaire = null;
-$steps = array();
-$questions = array();
 
-if ($questionnaire_id) {
-    global $wpdb;
-    $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
-    $steps_table = $wpdb->prefix . 'formxr_steps';
-    $questions_table = $wpdb->prefix . 'formxr_questions';
-    
-    $questionnaire = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $questionnaires_table WHERE id = %d", 
-        $questionnaire_id
-    ));
-    
-    if ($questionnaire) {
-        $steps = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $steps_table WHERE questionnaire_id = %d ORDER BY step_order", 
-            $questionnaire_id
-        ));
-        
-        $questions = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $questions_table WHERE questionnaire_id = %d ORDER BY question_order", 
-            $questionnaire_id
-        ));
-    }
+if (!$questionnaire_id) {
+    echo '<div class="formxr-alert formxr-alert-error">';
+    echo '<span class="formxr-alert-icon">❌</span>';
+    echo __('Invalid questionnaire ID.', 'formxr');
+    echo '</div>';
+    include_once FORMXR_PLUGIN_DIR . 'templates/admin-footer.php';
+    return;
 }
 
-$is_editing = $questionnaire !== null;
-$page_title = $is_editing ? __('Edit Questionnaire', 'formxr') : __('Create New Questionnaire', 'formxr');
+// Get questionnaire data
+$questionnaire = $wpdb->get_row($wpdb->prepare("
+    SELECT * FROM {$wpdb->prefix}formxr_questionnaires 
+    WHERE id = %d
+", $questionnaire_id));
+
+if (!$questionnaire) {
+    echo '<div class="formxr-alert formxr-alert-error">';
+    echo '<span class="formxr-alert-icon">❌</span>';
+    echo __('Questionnaire not found.', 'formxr');
+    echo '</div>';
+    include_once FORMXR_PLUGIN_DIR . 'templates/admin-footer.php';
+    return;
+}
+
+// Get questions
+$questions = $wpdb->get_results($wpdb->prepare("
+    SELECT * FROM {$wpdb->prefix}formxr_questions 
+    WHERE questionnaire_id = %d 
+    ORDER BY order_num ASC
+", $questionnaire_id));
 ?>
 
-<div class="wrap formxr-admin" x-data="questionnaireBuilder(<?php echo esc_attr(json_encode(array(
-    'questionnaire' => $questionnaire,
-    'steps' => $steps,
-    'questions' => $questions,
-    'isEditing' => $is_editing
-))); ?>)">
+<div class="formxr-admin-wrap" x-data="questionnaireBuilder()" x-cloak>
+    <!-- Page Header -->
     <div class="formxr-page-header">
-        <div class="formxr-page-title">
-            <h1>
-                <span class="formxr-icon"><?php echo $is_editing ? '✏️' : '➕'; ?></span>
-                <?php echo esc_html($page_title); ?>
+        <div class="formxr-page-header-content">
+            <h1 class="formxr-page-title">
+                <span class="formxr-page-icon">🛠️</span>
+                <?php _e('Questionnaire Builder', 'formxr'); ?>
             </h1>
-            <p class="formxr-subtitle">
-                <?php echo $is_editing ? 
-                    __('Modify your questionnaire structure and settings', 'formxr') : 
-                    __('Build your interactive questionnaire with custom pricing', 'formxr'); ?>
+            <p class="formxr-page-subtitle">
+                <?php printf(__('Advanced builder for: %s', 'formxr'), esc_html($questionnaire->title)); ?>
             </p>
-            <div class="formxr-header-actions">
-                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="btn-formxr btn-outline">
-                    <?php _e('← Back to List', 'formxr'); ?>
-                </a>
-                <button type="button" class="btn-formxr" @click="saveQuestionnaire()" :disabled="saving">
-                    <span x-show="!saving"><?php _e('Save Questionnaire', 'formxr'); ?></span>
-                    <span x-show="saving"><?php _e('Saving...', 'formxr'); ?></span>
-                </button>
+        </div>
+        <div class="formxr-page-actions">
+            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=edit&id=' . $questionnaire_id); ?>" class="formxr-btn formxr-btn-secondary">
+                <span class="formxr-btn-icon">✏️</span>
+                <?php _e('Basic Editor', 'formxr'); ?>
+            </a>
+            <button type="button" @click="saveBuilder()" class="formxr-btn formxr-btn-primary">
+                <span class="formxr-btn-icon">💾</span>
+                <?php _e('Save Changes', 'formxr'); ?>
+            </button>
+        </div>
+    </div>
+
+    <!-- Builder Toolbar -->
+    <div class="formxr-section">
+        <div class="formxr-builder-toolbar">
+            <div class="formxr-toolbar-group">
+                <h3 class="formxr-toolbar-title"><?php _e('Question Types', 'formxr'); ?></h3>
+                <div class="formxr-question-types">
+                    <button type="button" 
+                            @click="addQuestionType('text')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📝</span>
+                        <span class="formxr-question-type-label"><?php _e('Text', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('textarea')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📄</span>
+                        <span class="formxr-question-type-label"><?php _e('Textarea', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('email')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📧</span>
+                        <span class="formxr-question-type-label"><?php _e('Email', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('number')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">🔢</span>
+                        <span class="formxr-question-type-label"><?php _e('Number', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('select')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📋</span>
+                        <span class="formxr-question-type-label"><?php _e('Dropdown', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('radio')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">🔘</span>
+                        <span class="formxr-question-type-label"><?php _e('Radio', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('checkbox')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">☑️</span>
+                        <span class="formxr-question-type-label"><?php _e('Checkbox', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('date')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📅</span>
+                        <span class="formxr-question-type-label"><?php _e('Date', 'formxr'); ?></span>
+                    </button>
+                    
+                    <button type="button" 
+                            @click="addQuestionType('file')" 
+                            class="formxr-question-type-btn">
+                        <span class="formxr-question-type-icon">📎</span>
+                        <span class="formxr-question-type-label"><?php _e('File', 'formxr'); ?></span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="formxr-toolbar-group">
+                <h3 class="formxr-toolbar-title"><?php _e('Actions', 'formxr'); ?></h3>
+                <div class="formxr-toolbar-actions">
+                    <button type="button" @click="previewForm()" class="formxr-btn formxr-btn-info">
+                        <span class="formxr-btn-icon">👁️</span>
+                        <?php _e('Preview', 'formxr'); ?>
+                    </button>
+                    
+                    <button type="button" @click="importQuestions()" class="formxr-btn formxr-btn-secondary">
+                        <span class="formxr-btn-icon">📥</span>
+                        <?php _e('Import', 'formxr'); ?>
+                    </button>
+                    
+                    <button type="button" @click="exportQuestions()" class="formxr-btn formxr-btn-secondary">
+                        <span class="formxr-btn-icon">📤</span>
+                        <?php _e('Export', 'formxr'); ?>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="formxr-container">
-        <div class="formxr-builder-grid">
-            <!-- Main Content -->
-            <div class="formxr-builder-main">
-                <!-- Basic Information -->
-                <div class="formxr-card">
-                    <div class="formxr-card-header">
-                        <h2><?php _e('Basic Information', 'formxr'); ?></h2>
-                        <p><?php _e('Configure the basic details of your questionnaire', 'formxr'); ?></p>
+    <!-- Builder Canvas -->
+    <div class="formxr-grid formxr-grid-builder">
+        <!-- Questions Panel -->
+        <div class="formxr-builder-panel formxr-questions-panel">
+            <div class="formxr-panel-header">
+                <h3 class="formxr-panel-title"><?php _e('Questions', 'formxr'); ?></h3>
+                <span class="formxr-question-count" x-text="questions.length + ' questions'"></span>
+            </div>
+            
+            <div class="formxr-panel-content">
+                <div class="formxr-questions-list" x-ref="questionsList">
+                    <template x-for="(question, index) in questions" :key="question.id">
+                        <div class="formxr-question-builder-item" 
+                             :class="{ 'active': selectedQuestion === index }"
+                             @click="selectQuestion(index)"
+                             x-ref="questionItem">
+                            
+                            <div class="formxr-question-handle">
+                                <span class="formxr-drag-icon">⋮⋮</span>
+                            </div>
+                            
+                            <div class="formxr-question-preview">
+                                <div class="formxr-question-type-indicator">
+                                    <span x-text="getQuestionTypeIcon(question.type)"></span>
+                                </div>
+                                <div class="formxr-question-content">
+                                    <div class="formxr-question-text" x-text="question.question || 'Untitled Question'"></div>
+                                    <div class="formxr-question-meta">
+                                        <span class="formxr-question-type" x-text="question.type"></span>
+                                        <span x-show="question.required" class="formxr-required-indicator">Required</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="formxr-question-actions">
+                                <button type="button" 
+                                        @click.stop="duplicateQuestion(index)" 
+                                        class="formxr-question-action-btn" 
+                                        title="<?php _e('Duplicate', 'formxr'); ?>">
+                                    📋
+                                </button>
+                                <button type="button" 
+                                        @click.stop="deleteQuestion(index)" 
+                                        class="formxr-question-action-btn formxr-delete-btn" 
+                                        title="<?php _e('Delete', 'formxr'); ?>">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Empty State -->
+                    <div x-show="questions.length === 0" class="formxr-empty-state">
+                        <div class="formxr-empty-icon">❓</div>
+                        <h4><?php _e('No Questions Yet', 'formxr'); ?></h4>
+                        <p><?php _e('Click on a question type above to add your first question.', 'formxr'); ?></p>
                     </div>
-                    <div class="formxr-card-body">
-                        <div class="formxr-form-group">
-                            <label for="questionnaire_title" class="formxr-label">
-                                <?php _e('Title', 'formxr'); ?>
-                                <span class="formxr-required">*</span>
-                            </label>
-                            <input type="text" 
-                                   id="questionnaire_title" 
-                                   x-model="questionnaire.title"
-                                   class="formxr-input"
-                                   placeholder="<?php esc_attr_e('Enter questionnaire title', 'formxr'); ?>"
-                                   required>
-                        </div>
+                </div>
+            </div>
+        </div>
 
-                        <div class="formxr-form-group">
-                            <label for="questionnaire_description" class="formxr-label">
-                                <?php _e('Description', 'formxr'); ?>
-                            </label>
-                            <textarea id="questionnaire_description" 
-                                      x-model="questionnaire.description"
-                                      class="formxr-textarea"
-                                      rows="3"
-                                      placeholder="<?php esc_attr_e('Brief description of this questionnaire', 'formxr'); ?>"></textarea>
-                        </div>
-
-                        <div class="formxr-form-row">
+        <!-- Question Editor Panel -->
+        <div class="formxr-builder-panel formxr-editor-panel">
+            <div class="formxr-panel-header">
+                <h3 class="formxr-panel-title"><?php _e('Question Editor', 'formxr'); ?></h3>
+                <span x-show="selectedQuestion !== null" x-text="'Question ' + (selectedQuestion + 1)"></span>
+            </div>
+            
+            <div class="formxr-panel-content">
+                <div x-show="selectedQuestion !== null" class="formxr-question-editor">
+                    <template x-if="questions[selectedQuestion]">
+                        <div class="formxr-form-group-container">
+                            <!-- Question Text -->
                             <div class="formxr-form-group">
-                                <label for="questionnaire_status" class="formxr-label">
-                                    <?php _e('Status', 'formxr'); ?>
+                                <label class="formxr-form-label">
+                                    <?php _e('Question Text', 'formxr'); ?> <span class="required">*</span>
                                 </label>
-                                <select id="questionnaire_status" x-model="questionnaire.status" class="formxr-select">
-                                    <option value="active"><?php _e('Active', 'formxr'); ?></option>
-                                    <option value="inactive"><?php _e('Inactive', 'formxr'); ?></option>
+                                <input type="text" 
+                                       class="formxr-form-control" 
+                                       x-model="questions[selectedQuestion].question"
+                                       placeholder="<?php _e('Enter your question...', 'formxr'); ?>">
+                            </div>
+
+                            <!-- Question Type -->
+                            <div class="formxr-form-group">
+                                <label class="formxr-form-label">
+                                    <?php _e('Question Type', 'formxr'); ?>
+                                </label>
+                                <select class="formxr-form-control" x-model="questions[selectedQuestion].type">
+                                    <option value="text"><?php _e('Text Input', 'formxr'); ?></option>
+                                    <option value="textarea"><?php _e('Textarea', 'formxr'); ?></option>
+                                    <option value="email"><?php _e('Email', 'formxr'); ?></option>
+                                    <option value="number"><?php _e('Number', 'formxr'); ?></option>
+                                    <option value="select"><?php _e('Dropdown', 'formxr'); ?></option>
+                                    <option value="radio"><?php _e('Radio Buttons', 'formxr'); ?></option>
+                                    <option value="checkbox"><?php _e('Checkboxes', 'formxr'); ?></option>
+                                    <option value="date"><?php _e('Date', 'formxr'); ?></option>
+                                    <option value="file"><?php _e('File Upload', 'formxr'); ?></option>
                                 </select>
                             </div>
 
+                            <!-- Required Toggle -->
                             <div class="formxr-form-group">
-                                <label class="formxr-label">
-                                    <input type="checkbox" x-model="questionnaire.show_progress" class="formxr-checkbox">
-                                    <?php _e('Show Progress Bar', 'formxr'); ?>
-                                </label>
-                                <div class="formxr-help-text"><?php _e('Display step progress to users', 'formxr'); ?></div>
+                                <div class="formxr-form-check">
+                                    <input type="checkbox" 
+                                           class="formxr-form-check-input" 
+                                           x-model="questions[selectedQuestion].required">
+                                    <label class="formxr-form-check-label">
+                                        <?php _e('Required Question', 'formxr'); ?>
+                                    </label>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Steps & Questions -->
-                <div class="formxr-card">
-                    <div class="formxr-card-header">
-                        <h2><?php _e('Steps & Questions', 'formxr'); ?></h2>
-                        <p><?php _e('Build your questionnaire structure', 'formxr'); ?></p>
-                    </div>
-                    <div class="formxr-card-body">
-                        <!-- Steps List -->
-                        <div class="formxr-steps-container">
-                            <template x-for="(step, stepIndex) in questionnaire.steps" :key="step.id || stepIndex">
-                                <div class="formxr-step-item" :class="{ 'active': activeStep === stepIndex }">
-                                    <div class="formxr-step-header" @click="toggleStep(stepIndex)">
-                                        <div class="formxr-step-info">
-                                            <span class="formxr-step-number" x-text="stepIndex + 1"></span>
-                                            <span class="formxr-step-title" x-text="step.title || 'Untitled Step'"></span>
-                                            <span class="formxr-step-questions" x-text="'(' + step.questions.length + ' questions)'"></span>
-                                        </div>
-                                        <div class="formxr-step-actions">
-                                            <button type="button" @click.stop="removeStep(stepIndex)" class="formxr-btn-icon formxr-btn-danger">
+                            <!-- Placeholder -->
+                            <div class="formxr-form-group" 
+                                 x-show="['text', 'textarea', 'email', 'number'].includes(questions[selectedQuestion].type)">
+                                <label class="formxr-form-label">
+                                    <?php _e('Placeholder Text', 'formxr'); ?>
+                                </label>
+                                <input type="text" 
+                                       class="formxr-form-control" 
+                                       x-model="questions[selectedQuestion].placeholder"
+                                       placeholder="<?php _e('Enter placeholder text...', 'formxr'); ?>">
+                            </div>
+
+                            <!-- Options -->
+                            <div class="formxr-form-group" 
+                                 x-show="['select', 'radio', 'checkbox'].includes(questions[selectedQuestion].type)">
+                                <label class="formxr-form-label">
+                                    <?php _e('Options', 'formxr'); ?>
+                                </label>
+                                <div class="formxr-options-editor">
+                                    <template x-for="(option, optIndex) in getOptionsArray(questions[selectedQuestion])" :key="optIndex">
+                                        <div class="formxr-option-item">
+                                            <input type="text" 
+                                                   class="formxr-form-control" 
+                                                   x-model="option.value"
+                                                   @input="updateOptionsFromArray(questions[selectedQuestion])"
+                                                   placeholder="<?php _e('Option text...', 'formxr'); ?>">
+                                            <button type="button" 
+                                                    @click="removeOption(questions[selectedQuestion], optIndex)" 
+                                                    class="formxr-btn formxr-btn-sm formxr-btn-error">
                                                 🗑️
                                             </button>
-                                            <span class="formxr-step-toggle">
-                                                <span x-show="activeStep !== stepIndex">▼</span>
-                                                <span x-show="activeStep === stepIndex">▲</span>
-                                            </span>
                                         </div>
-                                    </div>
+                                    </template>
+                                    <button type="button" 
+                                            @click="addOption(questions[selectedQuestion])" 
+                                            class="formxr-btn formxr-btn-sm formxr-btn-secondary">
+                                        <span class="formxr-btn-icon">➕</span>
+                                        <?php _e('Add Option', 'formxr'); ?>
+                                    </button>
+                                </div>
+                            </div>
 
-                                    <div x-show="activeStep === stepIndex" x-transition class="formxr-step-content">
-                                        <!-- Step Configuration -->
-                                        <div class="formxr-step-config">
-                                            <div class="formxr-form-row">
-                                                <div class="formxr-form-group">
-                                                    <label class="formxr-label"><?php _e('Step Title', 'formxr'); ?></label>
-                                                    <input type="text" 
-                                                           x-model="step.title"
-                                                           class="formxr-input"
-                                                           placeholder="<?php esc_attr_e('Step title', 'formxr'); ?>">
-                                                </div>
-                                                <div class="formxr-form-group">
-                                                    <label class="formxr-label"><?php _e('Step Description', 'formxr'); ?></label>
-                                                    <input type="text" 
-                                                           x-model="step.description"
-                                                           class="formxr-input"
-                                                           placeholder="<?php esc_attr_e('Optional description', 'formxr'); ?>">
-                                                </div>
+                            <!-- Help Text -->
+                            <div class="formxr-form-group">
+                                <label class="formxr-form-label">
+                                    <?php _e('Help Text', 'formxr'); ?>
+                                </label>
+                                <textarea class="formxr-form-control" 
+                                          rows="2"
+                                          x-model="questions[selectedQuestion].help_text"
+                                          placeholder="<?php _e('Optional help text for this question...', 'formxr'); ?>"></textarea>
+                            </div>
+
+                            <!-- Advanced Settings -->
+                            <div class="formxr-form-group">
+                                <details class="formxr-details">
+                                    <summary class="formxr-details-summary"><?php _e('Advanced Settings', 'formxr'); ?></summary>
+                                    <div class="formxr-details-content">
+                                        <!-- Custom CSS Class -->
+                                        <div class="formxr-form-group">
+                                            <label class="formxr-form-label">
+                                                <?php _e('CSS Class', 'formxr'); ?>
+                                            </label>
+                                            <input type="text" 
+                                                   class="formxr-form-control" 
+                                                   x-model="questions[selectedQuestion].css_class"
+                                                   placeholder="<?php _e('custom-class', 'formxr'); ?>">
+                                        </div>
+
+                                        <!-- Conditional Logic -->
+                                        <div class="formxr-form-group">
+                                            <div class="formxr-form-check">
+                                                <input type="checkbox" 
+                                                       class="formxr-form-check-input" 
+                                                       x-model="questions[selectedQuestion].conditional">
+                                                <label class="formxr-form-check-label">
+                                                    <?php _e('Enable Conditional Logic', 'formxr'); ?>
+                                                </label>
                                             </div>
                                         </div>
-
-                                        <!-- Questions in this step -->
-                                        <div class="formxr-questions-container">
-                                            <h4><?php _e('Questions', 'formxr'); ?></h4>
-                                            
-                                            <template x-for="(question, questionIndex) in step.questions" :key="question.id || questionIndex">
-                                                <div class="formxr-question-item">
-                                                    <div class="formxr-question-header">
-                                                        <div class="formxr-question-info">
-                                                            <span class="formxr-question-type" x-text="question.type"></span>
-                                                            <span class="formxr-question-text" x-text="question.question_text || 'Untitled Question'"></span>
-                                                        </div>
-                                                        <div class="formxr-question-actions">
-                                                            <button type="button" @click="editQuestion(stepIndex, questionIndex)" class="formxr-btn-icon">
-                                                                ✏️
-                                                            </button>
-                                                            <button type="button" @click="removeQuestion(stepIndex, questionIndex)" class="formxr-btn-icon formxr-btn-danger">
-                                                                🗑️
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </template>
-
-                                            <button type="button" @click="addQuestion(stepIndex)" class="formxr-btn formxr-btn-outline formxr-btn-sm">
-                                                ➕ <?php _e('Add Question', 'formxr'); ?>
-                                            </button>
-                                        </div>
                                     </div>
-                                </div>
-                            </template>
-
-                            <button type="button" @click="addStep()" class="formxr-btn formxr-btn-outline">
-                                ➕ <?php _e('Add Step', 'formxr'); ?>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sidebar -->
-            <div class="formxr-builder-sidebar">
-                <!-- Pricing Configuration -->
-                <div class="formxr-card">
-                    <div class="formxr-card-header">
-                        <h3><?php _e('Pricing Configuration', 'formxr'); ?></h3>
-                    </div>
-                    <div class="formxr-card-body">
-                        <div class="formxr-form-group">
-                            <label for="base_price" class="formxr-label">
-                                <?php _e('Base Price', 'formxr'); ?>
-                            </label>
-                            <input type="number" 
-                                   id="base_price" 
-                                   x-model="questionnaire.base_price"
-                                   class="formxr-input"
-                                   step="0.01"
-                                   min="0"
-                                   placeholder="0.00">
-                            <div class="formxr-help-text"><?php _e('Starting price before question impacts', 'formxr'); ?></div>
-                        </div>
-
-                        <div class="formxr-form-group">
-                            <label for="currency" class="formxr-label">
-                                <?php _e('Currency', 'formxr'); ?>
-                            </label>
-                            <select id="currency" x-model="questionnaire.currency" class="formxr-select">
-                                <option value="USD">USD ($)</option>
-                                <option value="EUR">EUR (€)</option>
-                                <option value="GBP">GBP (£)</option>
-                                <option value="CAD">CAD ($)</option>
-                                <option value="AUD">AUD ($)</option>
-                            </select>
-                        </div>
-
-                        <div class="formxr-form-group">
-                            <label for="price_type" class="formxr-label">
-                                <?php _e('Price Type', 'formxr'); ?>
-                            </label>
-                            <select id="price_type" x-model="questionnaire.price_type" class="formxr-select">
-                                <option value="quote"><?php _e('Quote/Estimate', 'formxr'); ?></option>
-                                <option value="fixed"><?php _e('Fixed Price', 'formxr'); ?></option>
-                                <option value="range"><?php _e('Price Range', 'formxr'); ?></option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Email Configuration -->
-                <div class="formxr-card">
-                    <div class="formxr-card-header">
-                        <h3><?php _e('Email Notifications', 'formxr'); ?></h3>
-                    </div>
-                    <div class="formxr-card-body">
-                        <div class="formxr-form-group">
-                            <label for="notification_emails" class="formxr-label">
-                                <?php _e('Notification Recipients', 'formxr'); ?>
-                            </label>
-                            <textarea id="notification_emails" 
-                                      x-model="questionnaire.notification_emails"
-                                      class="formxr-textarea"
-                                      rows="3"
-                                      placeholder="<?php esc_attr_e('email1@example.com, email2@example.com', 'formxr'); ?>"></textarea>
-                            <div class="formxr-help-text"><?php _e('Comma-separated email addresses', 'formxr'); ?></div>
-                        </div>
-
-                        <div class="formxr-form-group">
-                            <label for="email_subject" class="formxr-label">
-                                <?php _e('Email Subject', 'formxr'); ?>
-                            </label>
-                            <input type="text" 
-                                   id="email_subject" 
-                                   x-model="questionnaire.email_subject"
-                                   class="formxr-input"
-                                   placeholder="<?php esc_attr_e('New submission for {questionnaire_title}', 'formxr'); ?>">
-                        </div>
-
-                        <div class="formxr-form-group">
-                            <label for="email_template" class="formxr-label">
-                                <?php _e('Email Template', 'formxr'); ?>
-                            </label>
-                            <textarea id="email_template" 
-                                      x-model="questionnaire.email_template"
-                                      class="formxr-textarea"
-                                      rows="6"
-                                      placeholder="<?php esc_attr_e('New submission received...', 'formxr'); ?>"></textarea>
-                            <div class="formxr-help-text">
-                                <?php _e('Use placeholders:', 'formxr'); ?> 
-                                {user_email}, {calculated_price}, {submission_data}
+                                </details>
                             </div>
                         </div>
-
-                        <div class="formxr-form-group">
-                            <label class="formxr-label">
-                                <input type="checkbox" x-model="questionnaire.send_user_copy" class="formxr-checkbox">
-                                <?php _e('Send copy to user', 'formxr'); ?>
-                            </label>
-                            <div class="formxr-help-text"><?php _e('Send a copy of the submission to the user', 'formxr'); ?></div>
-                        </div>
-                    </div>
+                    </template>
                 </div>
-
-                <!-- Actions -->
-                <div class="formxr-card">
-                    <div class="formxr-card-body">
-                        <div class="formxr-action-group">
-                            <button type="button" @click="previewQuestionnaire()" class="formxr-btn formxr-btn-outline formxr-btn-block">
-                                👁️ <?php _e('Preview', 'formxr'); ?>
-                            </button>
-                            <?php if ($is_editing): ?>
-                            <div class="formxr-shortcode-info">
-                                <label class="formxr-label"><?php _e('Shortcode', 'formxr'); ?></label>
-                                <input type="text" 
-                                       value="[formxr_form id=&quot;<?php echo $questionnaire_id; ?>&quot;]"
-                                       class="formxr-input formxr-shortcode"
-                                       readonly
-                                       onclick="this.select()">
-                                <div class="formxr-help-text"><?php _e('Copy this shortcode to display the form', 'formxr'); ?></div>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+                
+                <div x-show="selectedQuestion === null" class="formxr-no-selection">
+                    <div class="formxr-empty-icon">👈</div>
+                    <h4><?php _e('Select a Question', 'formxr'); ?></h4>
+                    <p><?php _e('Click on a question from the left panel to edit its properties.', 'formxr'); ?></p>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Question Modal -->
-    <div x-show="showQuestionModal" 
-         x-transition 
-         class="formxr-modal-overlay" 
-         @click="showQuestionModal = false">
-        <div class="formxr-modal formxr-modal-lg" @click.stop>
-            <div class="formxr-modal-header">
-                <h3 x-text="editingQuestion.id ? '<?php _e('Edit Question', 'formxr'); ?>' : '<?php _e('Add Question', 'formxr'); ?>'"></h3>
-                <button type="button" @click="showQuestionModal = false" class="formxr-modal-close">×</button>
+        <!-- Preview Panel -->
+        <div class="formxr-builder-panel formxr-preview-panel">
+            <div class="formxr-panel-header">
+                <h3 class="formxr-panel-title"><?php _e('Live Preview', 'formxr'); ?></h3>
+                <button type="button" @click="refreshPreview()" class="formxr-btn formxr-btn-sm formxr-btn-secondary">
+                    🔄 <?php _e('Refresh', 'formxr'); ?>
+                </button>
             </div>
-            <div class="formxr-modal-body">
-                <form @submit.prevent="saveQuestion()">
-                    <div class="formxr-form-group">
-                        <label class="formxr-label">
-                            <?php _e('Question Text', 'formxr'); ?>
-                            <span class="formxr-required">*</span>
-                        </label>
-                        <input type="text" 
-                               x-model="editingQuestion.question_text"
-                               class="formxr-input"
-                               required>
-                    </div>
+            
+            <div class="formxr-panel-content">
+                <div class="formxr-form-preview">
+                    <form class="formxr-preview-form">
+                        <template x-for="(question, index) in questions" :key="question.id">
+                            <div class="formxr-preview-question" 
+                                 :class="{ 'highlighted': selectedQuestion === index }">
+                                
+                                <!-- Question Label -->
+                                <label class="formxr-preview-label">
+                                    <span x-text="question.question || 'Untitled Question'"></span>
+                                    <span x-show="question.required" class="formxr-required">*</span>
+                                </label>
 
-                    <div class="formxr-form-group">
-                        <label class="formxr-label"><?php _e('Question Type', 'formxr'); ?></label>
-                        <select x-model="editingQuestion.type" class="formxr-select">
-                            <option value="text"><?php _e('Text Input', 'formxr'); ?></option>
-                            <option value="textarea"><?php _e('Text Area', 'formxr'); ?></option>
-                            <option value="select"><?php _e('Dropdown', 'formxr'); ?></option>
-                            <option value="radio"><?php _e('Radio Buttons', 'formxr'); ?></option>
-                            <option value="checkbox"><?php _e('Checkboxes', 'formxr'); ?></option>
-                            <option value="number"><?php _e('Number Input', 'formxr'); ?></option>
-                            <option value="range"><?php _e('Range Slider', 'formxr'); ?></option>
-                        </select>
-                    </div>
+                                <!-- Question Input Based on Type -->
+                                <div class="formxr-preview-input">
+                                    <!-- Text Input -->
+                                    <input x-show="question.type === 'text'" 
+                                           type="text" 
+                                           class="formxr-form-control" 
+                                           :placeholder="question.placeholder || ''"
+                                           disabled>
 
-                    <div x-show="['select', 'radio', 'checkbox'].includes(editingQuestion.type)" class="formxr-form-group">
-                        <label class="formxr-label"><?php _e('Options', 'formxr'); ?></label>
-                        <textarea x-model="editingQuestion.options" 
-                                  class="formxr-textarea"
-                                  rows="4"
-                                  placeholder="<?php esc_attr_e('Option 1\nOption 2\nOption 3', 'formxr'); ?>"></textarea>
-                        <div class="formxr-help-text"><?php _e('One option per line', 'formxr'); ?></div>
-                    </div>
+                                    <!-- Textarea -->
+                                    <textarea x-show="question.type === 'textarea'" 
+                                              class="formxr-form-control" 
+                                              rows="3"
+                                              :placeholder="question.placeholder || ''"
+                                              disabled></textarea>
 
-                    <div class="formxr-form-group">
-                        <label class="formxr-label"><?php _e('Price Impact', 'formxr'); ?></label>
-                        <select x-model="editingQuestion.price_impact_type" class="formxr-select">
-                            <option value="none"><?php _e('No Impact', 'formxr'); ?></option>
-                            <option value="fixed"><?php _e('Fixed Amount', 'formxr'); ?></option>
-                            <option value="percentage"><?php _e('Percentage', 'formxr'); ?></option>
-                        </select>
-                    </div>
+                                    <!-- Email -->
+                                    <input x-show="question.type === 'email'" 
+                                           type="email" 
+                                           class="formxr-form-control" 
+                                           :placeholder="question.placeholder || ''"
+                                           disabled>
 
-                    <div x-show="editingQuestion.price_impact_type !== 'none'" class="formxr-form-group">
-                        <label class="formxr-label"><?php _e('Price Impact Value', 'formxr'); ?></label>
-                        <input type="number" 
-                               x-model="editingQuestion.price_impact_value"
-                               class="formxr-input"
-                               step="0.01">
-                        <div class="formxr-help-text"><?php _e('Positive to add, negative to subtract', 'formxr'); ?></div>
-                    </div>
+                                    <!-- Number -->
+                                    <input x-show="question.type === 'number'" 
+                                           type="number" 
+                                           class="formxr-form-control" 
+                                           :placeholder="question.placeholder || ''"
+                                           disabled>
 
-                    <div class="formxr-form-group">
-                        <label class="formxr-label">
-                            <input type="checkbox" x-model="editingQuestion.required" class="formxr-checkbox">
-                            <?php _e('Required Field', 'formxr'); ?>
-                        </label>
-                    </div>
+                                    <!-- Date -->
+                                    <input x-show="question.type === 'date'" 
+                                           type="date" 
+                                           class="formxr-form-control" 
+                                           disabled>
 
-                    <div class="formxr-modal-actions">
-                        <button type="button" @click="showQuestionModal = false" class="formxr-btn formxr-btn-secondary">
-                            <?php _e('Cancel', 'formxr'); ?>
-                        </button>
-                        <button type="submit" class="formxr-btn formxr-btn-primary">
-                            <?php _e('Save Question', 'formxr'); ?>
-                        </button>
-                    </div>
-                </form>
+                                    <!-- File -->
+                                    <input x-show="question.type === 'file'" 
+                                           type="file" 
+                                           class="formxr-form-control" 
+                                           disabled>
+
+                                    <!-- Select -->
+                                    <select x-show="question.type === 'select'" 
+                                            class="formxr-form-control" 
+                                            disabled>
+                                        <option><?php _e('Select an option...', 'formxr'); ?></option>
+                                        <template x-for="option in getOptionsArray(question)" :key="option.value">
+                                            <option x-text="option.value"></option>
+                                        </template>
+                                    </select>
+
+                                    <!-- Radio -->
+                                    <div x-show="question.type === 'radio'" class="formxr-radio-group">
+                                        <template x-for="option in getOptionsArray(question)" :key="option.value">
+                                            <div class="formxr-radio-item">
+                                                <input type="radio" 
+                                                       :name="'preview_radio_' + index" 
+                                                       :id="'preview_radio_' + index + '_' + option.value"
+                                                       disabled>
+                                                <label :for="'preview_radio_' + index + '_' + option.value" 
+                                                       x-text="option.value"></label>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Checkbox -->
+                                    <div x-show="question.type === 'checkbox'" class="formxr-checkbox-group">
+                                        <template x-for="option in getOptionsArray(question)" :key="option.value">
+                                            <div class="formxr-checkbox-item">
+                                                <input type="checkbox" 
+                                                       :id="'preview_checkbox_' + index + '_' + option.value"
+                                                       disabled>
+                                                <label :for="'preview_checkbox_' + index + '_' + option.value" 
+                                                       x-text="option.value"></label>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Help Text -->
+                                <p x-show="question.help_text" 
+                                   class="formxr-preview-help" 
+                                   x-text="question.help_text"></p>
+                            </div>
+                        </template>
+
+                        <!-- Submit Button -->
+                        <div class="formxr-preview-submit">
+                            <button type="button" class="formxr-btn formxr-btn-primary" disabled>
+                                <?php _e('Submit', 'formxr'); ?>
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function questionnaireBuilder(initialData) {
+function questionnaireBuilder() {
     return {
-        questionnaire: initialData.questionnaire || {
-            id: null,
-            title: '',
-            description: '',
-            status: 'active',
-            show_progress: true,
-            base_price: 0,
-            currency: 'USD',
-            price_type: 'quote',
-            notification_emails: '',
-            email_subject: 'New submission for {questionnaire_title}',
-            email_template: 'Hello,\n\nA new submission has been received for {questionnaire_title}.\n\nUser Email: {user_email}\nCalculated Price: {calculated_price}\n\nSubmission Details:\n{submission_data}\n\nSubmitted on: {submitted_date}',
-            send_user_copy: false,
-            steps: []
+        questions: <?php echo json_encode(array_map(function($q) {
+            return [
+                'id' => $q->id,
+                'question' => $q->question,
+                'type' => $q->type,
+                'options' => $q->options,
+                'required' => $q->required == 1,
+                'placeholder' => '',
+                'help_text' => '',
+                'css_class' => '',
+                'conditional' => false
+            ];
+        }, $questions)); ?>,
+        selectedQuestion: null,
+        nextId: <?php echo count($questions) + 1; ?>,
+        
+        selectQuestion(index) {
+            this.selectedQuestion = index;
         },
-        saving: false,
-        activeStep: 0,
-        showQuestionModal: false,
-        editingQuestion: {},
-        editingStepIndex: null,
-        editingQuestionIndex: null,
-
-        init() {
-            // Initialize steps if we have existing data
-            if (initialData.steps && initialData.steps.length > 0) {
-                this.questionnaire.steps = initialData.steps.map(step => ({
-                    ...step,
-                    questions: initialData.questions.filter(q => q.step_id == step.id) || []
-                }));
-            }
-
-            // Ensure we have at least one step
-            if (this.questionnaire.steps.length === 0) {
-                this.addStep();
-            }
-        },
-
-        addStep() {
-            this.questionnaire.steps.push({
-                id: null,
-                title: `Step ${this.questionnaire.steps.length + 1}`,
-                description: '',
-                questions: []
-            });
-            this.activeStep = this.questionnaire.steps.length - 1;
-        },
-
-        removeStep(stepIndex) {
-            if (this.questionnaire.steps.length > 1) {
-                this.questionnaire.steps.splice(stepIndex, 1);
-                if (this.activeStep >= this.questionnaire.steps.length) {
-                    this.activeStep = this.questionnaire.steps.length - 1;
-                }
-            }
-        },
-
-        toggleStep(stepIndex) {
-            this.activeStep = this.activeStep === stepIndex ? -1 : stepIndex;
-        },
-
-        addQuestion(stepIndex) {
-            this.editingStepIndex = stepIndex;
-            this.editingQuestionIndex = null;
-            this.editingQuestion = {
-                id: null,
-                question_text: '',
-                type: 'text',
-                options: '',
-                price_impact_type: 'none',
-                price_impact_value: 0,
-                required: false
+        
+        addQuestionType(type) {
+            const newQuestion = {
+                id: this.nextId++,
+                question: '',
+                type: type,
+                options: type === 'select' || type === 'radio' || type === 'checkbox' ? 'Option 1\nOption 2\nOption 3' : '',
+                required: false,
+                placeholder: '',
+                help_text: '',
+                css_class: '',
+                conditional: false
             };
-            this.showQuestionModal = true;
-        },
-
-        editQuestion(stepIndex, questionIndex) {
-            this.editingStepIndex = stepIndex;
-            this.editingQuestionIndex = questionIndex;
-            this.editingQuestion = { ...this.questionnaire.steps[stepIndex].questions[questionIndex] };
-            this.showQuestionModal = true;
-        },
-
-        removeQuestion(stepIndex, questionIndex) {
-            this.questionnaire.steps[stepIndex].questions.splice(questionIndex, 1);
-        },
-
-        saveQuestion() {
-            if (this.editingQuestionIndex !== null) {
-                // Update existing question
-                this.questionnaire.steps[this.editingStepIndex].questions[this.editingQuestionIndex] = { ...this.editingQuestion };
-            } else {
-                // Add new question
-                this.questionnaire.steps[this.editingStepIndex].questions.push({ ...this.editingQuestion });
-            }
-            this.showQuestionModal = false;
-        },
-
-        async saveQuestionnaire() {
-            if (this.saving) return;
             
-            this.saving = true;
-            
-            try {
-                const formData = new FormData();
-                formData.append('action', 'formxr_save_questionnaire');
-                formData.append('nonce', formxrAdmin.nonce);
-                formData.append('questionnaire', JSON.stringify(this.questionnaire));
-                
-                const response = await fetch(formxrAdmin.ajaxUrl, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Redirect to questionnaires list or update current page
-                    if (!this.questionnaire.id) {
-                        window.location.href = formxrAdmin.adminUrl + 'admin.php?page=formxr-questionnaires&action=edit&id=' + result.data.id;
-                    } else {
-                        // Show success message
-                        alert('Questionnaire saved successfully!');
-                    }
-                } else {
-                    alert('Error: ' + (result.data || 'Unknown error'));
+            this.questions.push(newQuestion);
+            this.selectedQuestion = this.questions.length - 1;
+        },
+        
+        deleteQuestion(index) {
+            if (confirm('<?php _e('Are you sure you want to delete this question?', 'formxr'); ?>')) {
+                this.questions.splice(index, 1);
+                if (this.selectedQuestion >= this.questions.length) {
+                    this.selectedQuestion = this.questions.length > 0 ? this.questions.length - 1 : null;
                 }
-                
-            } catch (error) {
-                alert('Network error: ' + error.message);
-            } finally {
-                this.saving = false;
             }
         },
-
-        previewQuestionnaire() {
-            // Implementation for preview functionality
-            alert('Preview functionality will be implemented');
+        
+        duplicateQuestion(index) {
+            const originalQuestion = this.questions[index];
+            const duplicatedQuestion = {
+                ...originalQuestion,
+                id: this.nextId++,
+                question: originalQuestion.question + ' (Copy)'
+            };
+            
+            this.questions.splice(index + 1, 0, duplicatedQuestion);
+            this.selectedQuestion = index + 1;
+        },
+        
+        getOptionsArray(question) {
+            if (!question.options) return [];
+            return question.options.split('\n').filter(opt => opt.trim()).map(opt => ({ value: opt.trim() }));
+        },
+        
+        updateOptionsFromArray(question) {
+            // This would be implemented to sync array changes back to string
+        },
+        
+        addOption(question) {
+            const options = this.getOptionsArray(question);
+            options.push({ value: 'New Option' });
+            question.options = options.map(opt => opt.value).join('\n');
+        },
+        
+        removeOption(question, index) {
+            const options = this.getOptionsArray(question);
+            options.splice(index, 1);
+            question.options = options.map(opt => opt.value).join('\n');
+        },
+        
+        getQuestionTypeIcon(type) {
+            const icons = {
+                'text': '📝',
+                'textarea': '📄',
+                'email': '📧',
+                'number': '🔢',
+                'select': '📋',
+                'radio': '🔘',
+                'checkbox': '☑️',
+                'date': '📅',
+                'file': '📎'
+            };
+            return icons[type] || '❓';
+        },
+        
+        previewForm() {
+            alert('<?php _e('Preview functionality would open in a new window or modal.', 'formxr'); ?>');
+        },
+        
+        importQuestions() {
+            alert('<?php _e('Import functionality would allow uploading question sets.', 'formxr'); ?>');
+        },
+        
+        exportQuestions() {
+            alert('<?php _e('Export functionality would download question data.', 'formxr'); ?>');
+        },
+        
+        refreshPreview() {
+            // Force re-render of preview
+            this.$nextTick(() => {
+                // Preview refresh logic
+            });
+        },
+        
+        saveBuilder() {
+            // Save the questionnaire data via AJAX
+            const data = {
+                action: 'formxr_save_builder',
+                questionnaire_id: <?php echo $questionnaire_id; ?>,
+                questions: this.questions,
+                nonce: '<?php echo wp_create_nonce('formxr_save_builder'); ?>'
+            };
+            
+            fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert('<?php _e('Questions saved successfully!', 'formxr'); ?>');
+                } else {
+                    alert('<?php _e('Error saving questions. Please try again.', 'formxr'); ?>');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('<?php _e('Error saving questions. Please try again.', 'formxr'); ?>');
+            });
         }
     }
 }
 </script>
+
+<?php
+// Include footer
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-footer.php';
+?>

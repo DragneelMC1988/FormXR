@@ -1,279 +1,388 @@
 <?php
+/**
+ * Admin New Questionnaire Template
+ * Complete rewrite with consistent header/footer structure
+ */
 if (!defined('ABSPATH')) {
     exit;
 }
+
+// Include header
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-header.php';
+
+// Handle form submission
+if (isset($_POST['save_questionnaire']) && wp_verify_nonce($_POST['formxr_questionnaire_nonce'], 'formxr_save_questionnaire')) {
+    global $wpdb;
+    
+    $title = sanitize_text_field($_POST['title']);
+    $description = sanitize_textarea_field($_POST['description']);
+    $price = floatval($_POST['price']);
+    $status = sanitize_text_field($_POST['status']);
+    $questions = isset($_POST['questions']) ? $_POST['questions'] : array();
+    
+    // Insert questionnaire
+    $result = $wpdb->insert(
+        $wpdb->prefix . 'formxr_questionnaires',
+        array(
+            'title' => $title,
+            'description' => $description,
+            'price' => $price,
+            'status' => $status,
+            'created_at' => current_time('mysql'),
+            'updated_at' => current_time('mysql')
+        ),
+        array('%s', '%s', '%f', '%s', '%s', '%s')
+    );
+    
+    if ($result) {
+        $questionnaire_id = $wpdb->insert_id;
+        
+        // Insert questions
+        if (!empty($questions)) {
+            foreach ($questions as $index => $question) {
+                if (!empty($question['question'])) {
+                    $wpdb->insert(
+                        $wpdb->prefix . 'formxr_questions',
+                        array(
+                            'questionnaire_id' => $questionnaire_id,
+                            'question' => sanitize_text_field($question['question']),
+                            'type' => sanitize_text_field($question['type']),
+                            'options' => isset($question['options']) ? sanitize_textarea_field($question['options']) : '',
+                            'required' => isset($question['required']) ? 1 : 0,
+                            'order_num' => $index + 1
+                        ),
+                        array('%d', '%s', '%s', '%s', '%d', '%d')
+                    );
+                }
+            }
+        }
+        
+        echo '<div class="formxr-alert formxr-alert-success">';
+        echo '<span class="formxr-alert-icon">✅</span>';
+        echo sprintf(__('Questionnaire "%s" created successfully! ', 'formxr'), esc_html($title));
+        echo '<strong>' . sprintf(__('Shortcode: [formxr_form id="%d"]', 'formxr'), $questionnaire_id) . '</strong>';
+        echo '</div>';
+        
+        $show_success = true;
+        $new_questionnaire_id = $questionnaire_id;
+    } else {
+        echo '<div class="formxr-alert formxr-alert-error">';
+        echo '<span class="formxr-alert-icon">❌</span>';
+        echo __('Error creating questionnaire. Please try again.', 'formxr');
+        echo '</div>';
+    }
+}
 ?>
 
-<div class="wrap formxr-questionnaire-builder" x-data="questionnaireBuilder()" x-cloak>  
+<div class="formxr-admin-wrap" x-data="questionnaireBuilder()" x-cloak>
+    <!-- Page Header -->
     <div class="formxr-page-header">
-        <div class="formxr-page-title">
-            <h1>
-                <span class="dashicons dashicons-plus-alt"></span>
+        <div class="formxr-page-header-content">
+            <h1 class="formxr-page-title">
+                <span class="formxr-page-icon">➕</span>
                 <?php _e('Create New Questionnaire', 'formxr'); ?>
             </h1>
-            <div class="formxr-header-actions">
-                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="btn-formxr btn-outline">
-                    <?php _e('← Back to List', 'formxr'); ?>
-                </a>
-            </div>
+            <p class="formxr-page-subtitle">
+                <?php _e('Build a new questionnaire with custom questions and settings', 'formxr'); ?>
+            </p>
+        </div>
+        <div class="formxr-page-actions">
+            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="formxr-btn formxr-btn-secondary">
+                <span class="formxr-btn-icon">←</span>
+                <?php _e('Back to Questionnaires', 'formxr'); ?>
+            </a>
         </div>
     </div>
 
-    <div class="formxr-container">
-        <!-- Success Message -->
-        <div x-show="questionnaire.saved" class="notice notice-success">
-            <p><strong><?php _e('Questionnaire saved successfully!', 'formxr'); ?></strong></p>
-            <div class="shortcode-display">
-                <?php _e('Shortcode:', 'formxr'); ?> <strong>[formxr_form id="<span x-text="questionnaire.id"></span>"]</strong>
-                <button @click="copyShortcode()" class="btn-formxr btn-small"><?php _e('Copy', 'formxr'); ?></button>
-            </div>
-        </div>
-
-        <!-- Tabs -->
-        <div class="builder-tabs">
-            <button class="tab-button" :class="{ active: currentTab === 'basic' }" @click="currentTab = 'basic'">
-                Step 1: Basic Info
-            </button>
-            <button class="tab-button" :class="{ active: currentTab === 'steps' }" @click="currentTab = 'steps'" :disabled="!questionnaire.title">
-                Step 2: Configure Steps
-            </button>
-            <button class="tab-button" :class="{ active: currentTab === 'email' }" @click="currentTab = 'email'" :disabled="questionnaire.steps.length === 0">
-                Step 3: Email Template
-            </button>
-            <button class="tab-button" :class="{ active: currentTab === 'conditions' }" @click="currentTab = 'conditions'" :disabled="questionnaire.steps.length === 0">
-                Step 4: Add Conditions
-            </button>
-        </div>
-
-        <!-- Content -->
-        <div class="builder-content">
-            <!-- Step 1: Basic Info -->
-            <div x-show="currentTab === 'basic'">
-                <div class="form-group">
-                    <label class="form-label">Questionnaire Title *</label>
-                    <input type="text" class="form-input" x-model="questionnaire.title" placeholder="Enter questionnaire title">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-textarea" x-model="questionnaire.description" placeholder="Enter questionnaire description"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="enable-pricing" x-model="questionnaire.pricing_enabled">
-                        <label for="enable-pricing">Enable Pricing</label>
+    <?php if (isset($show_success) && $show_success) : ?>
+        <!-- Success Actions -->
+        <div class="formxr-section">
+            <div class="formxr-widget">
+                <div class="formxr-widget-content">
+                    <div class="formxr-success-actions">
+                        <h3><?php _e('What would you like to do next?', 'formxr'); ?></h3>
+                        <div class="formxr-button-group">
+                            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=edit&id=' . $new_questionnaire_id); ?>" class="formxr-btn formxr-btn-primary">
+                                <span class="formxr-btn-icon">✏️</span>
+                                <?php _e('Edit Questionnaire', 'formxr'); ?>
+                            </a>
+                            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires&action=new'); ?>" class="formxr-btn formxr-btn-secondary">
+                                <span class="formxr-btn-icon">➕</span>
+                                <?php _e('Create Another', 'formxr'); ?>
+                            </a>
+                            <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="formxr-btn formxr-btn-secondary">
+                                <span class="formxr-btn-icon">📝</span>
+                                <?php _e('View All Questionnaires', 'formxr'); ?>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
+    <?php endif; ?>
 
-            <!-- Step 2: Configure Steps -->
-            <div x-show="currentTab === 'steps'">
-                <template x-for="(step, stepIndex) in questionnaire.steps" :key="stepIndex">
-                    <div class="step-section">
-                        <div class="step-header">
-                            <div class="step-title">Step <span x-text="stepIndex + 1"></span></div>
-                            <button @click="removeStep(stepIndex)" class="btn-formxr btn-danger" x-show="questionnaire.steps.length > 1">
-                                Remove Step
-                            </button>
+    <form method="post" action="" class="formxr-questionnaire-form">
+        <?php wp_nonce_field('formxr_save_questionnaire', 'formxr_questionnaire_nonce'); ?>
+        
+        <!-- Basic Information Section -->
+        <div class="formxr-section">
+            <div class="formxr-section-header">
+                <h2 class="formxr-section-title"><?php _e('Basic Information', 'formxr'); ?></h2>
+            </div>
+            
+            <div class="formxr-widget">
+                <div class="formxr-widget-content">
+                    <div class="formxr-form-grid">
+                        <!-- Title -->
+                        <div class="formxr-form-group formxr-form-group-full">
+                            <label for="title" class="formxr-form-label">
+                                <?php _e('Questionnaire Title', 'formxr'); ?> <span class="required">*</span>
+                            </label>
+                            <input type="text" 
+                                   id="title" 
+                                   name="title" 
+                                   class="formxr-form-control" 
+                                   x-model="questionnaire.title"
+                                   placeholder="<?php _e('Enter questionnaire title...', 'formxr'); ?>" 
+                                   required>
+                            <p class="formxr-form-help"><?php _e('Give your questionnaire a clear, descriptive title.', 'formxr'); ?></p>
+                        </div>
+
+                        <!-- Description -->
+                        <div class="formxr-form-group formxr-form-group-full">
+                            <label for="description" class="formxr-form-label">
+                                <?php _e('Description', 'formxr'); ?>
+                            </label>
+                            <textarea id="description" 
+                                      name="description" 
+                                      class="formxr-form-control" 
+                                      rows="3"
+                                      x-model="questionnaire.description"
+                                      placeholder="<?php _e('Optional description for your questionnaire...', 'formxr'); ?>"></textarea>
+                            <p class="formxr-form-help"><?php _e('Provide additional context or instructions for users.', 'formxr'); ?></p>
+                        </div>
+
+                        <!-- Price -->
+                        <div class="formxr-form-group">
+                            <label for="price" class="formxr-form-label">
+                                <?php _e('Price', 'formxr'); ?>
+                            </label>
+                            <div class="formxr-input-group">
+                                <span class="formxr-input-prefix">$</span>
+                                <input type="number" 
+                                       id="price" 
+                                       name="price" 
+                                       class="formxr-form-control" 
+                                       x-model="questionnaire.price"
+                                       min="0" 
+                                       step="0.01" 
+                                       placeholder="0.00">
+                            </div>
+                            <p class="formxr-form-help"><?php _e('Set to 0 for a free questionnaire.', 'formxr'); ?></p>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="formxr-form-group">
+                            <label for="status" class="formxr-form-label">
+                                <?php _e('Status', 'formxr'); ?>
+                            </label>
+                            <select id="status" name="status" class="formxr-form-control" x-model="questionnaire.status">
+                                <option value="active"><?php _e('Active', 'formxr'); ?></option>
+                                <option value="inactive"><?php _e('Inactive', 'formxr'); ?></option>
+                                <option value="draft"><?php _e('Draft', 'formxr'); ?></option>
+                            </select>
+                            <p class="formxr-form-help"><?php _e('Only active questionnaires can receive submissions.', 'formxr'); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Questions Section -->
+        <div class="formxr-section">
+            <div class="formxr-section-header">
+                <h2 class="formxr-section-title"><?php _e('Questions', 'formxr'); ?></h2>
+                <button type="button" 
+                        @click="addQuestion()" 
+                        class="formxr-btn formxr-btn-primary">
+                    <span class="formxr-btn-icon">➕</span>
+                    <?php _e('Add Question', 'formxr'); ?>
+                </button>
+            </div>
+            
+            <div class="formxr-questions-container">
+                <template x-for="(question, index) in questionnaire.questions" :key="index">
+                    <div class="formxr-widget formxr-question-item">
+                        <div class="formxr-widget-header">
+                            <h3 class="formxr-widget-title">
+                                <span class="formxr-widget-icon">❓</span>
+                                <?php _e('Question', 'formxr'); ?> <span x-text="index + 1"></span>
+                            </h3>
+                            <div class="formxr-widget-actions">
+                                <button type="button" 
+                                        @click="moveQuestionUp(index)" 
+                                        x-show="index > 0"
+                                        class="formxr-btn formxr-btn-sm formxr-btn-secondary" 
+                                        title="<?php _e('Move Up', 'formxr'); ?>">
+                                    ↑
+                                </button>
+                                <button type="button" 
+                                        @click="moveQuestionDown(index)" 
+                                        x-show="index < questionnaire.questions.length - 1"
+                                        class="formxr-btn formxr-btn-sm formxr-btn-secondary" 
+                                        title="<?php _e('Move Down', 'formxr'); ?>">
+                                    ↓
+                                </button>
+                                <button type="button" 
+                                        @click="removeQuestion(index)" 
+                                        class="formxr-btn formxr-btn-sm formxr-btn-error" 
+                                        title="<?php _e('Remove Question', 'formxr'); ?>">
+                                    🗑️
+                                </button>
+                            </div>
                         </div>
                         
-                        <div class="step-content">
-                            <div class="form-group">
-                                <label class="form-label">Step Title *</label>
-                                <input type="text" class="form-input" x-model="step.title" placeholder="Enter step title">
-                            </div>
+                        <div class="formxr-widget-content">
+                            <div class="formxr-form-grid">
+                                <!-- Question Text -->
+                                <div class="formxr-form-group formxr-form-group-full">
+                                    <label class="formxr-form-label">
+                                        <?php _e('Question Text', 'formxr'); ?> <span class="required">*</span>
+                                    </label>
+                                    <input type="text" 
+                                           :name="'questions[' + index + '][question]'" 
+                                           class="formxr-form-control" 
+                                           x-model="question.question"
+                                           placeholder="<?php _e('Enter your question...', 'formxr'); ?>" 
+                                           required>
+                                </div>
 
-                            <div class="form-group">
-                                <label class="form-label">Step Description</label>
-                                <textarea class="form-textarea" x-model="step.description" placeholder="Enter step description"></textarea>
-                            </div>
+                                <!-- Question Type -->
+                                <div class="formxr-form-group">
+                                    <label class="formxr-form-label">
+                                        <?php _e('Question Type', 'formxr'); ?>
+                                    </label>
+                                    <select :name="'questions[' + index + '][type]'" 
+                                            class="formxr-form-control" 
+                                            x-model="question.type">
+                                        <option value="text"><?php _e('Text Input', 'formxr'); ?></option>
+                                        <option value="textarea"><?php _e('Textarea', 'formxr'); ?></option>
+                                        <option value="email"><?php _e('Email', 'formxr'); ?></option>
+                                        <option value="number"><?php _e('Number', 'formxr'); ?></option>
+                                        <option value="select"><?php _e('Dropdown', 'formxr'); ?></option>
+                                        <option value="radio"><?php _e('Radio Buttons', 'formxr'); ?></option>
+                                        <option value="checkbox"><?php _e('Checkboxes', 'formxr'); ?></option>
+                                        <option value="date"><?php _e('Date', 'formxr'); ?></option>
+                                        <option value="file"><?php _e('File Upload', 'formxr'); ?></option>
+                                    </select>
+                                </div>
 
-                            <div class="form-group">
-                                <label class="form-label">Questions</label>
-                                <div class="questions-list">
-                                    <template x-for="(question, questionIndex) in step.questions" :key="questionIndex">
-                                        <div class="question-item">
-                                            <div class="question-fields">
-                                                <div class="question-row">
-                                                    <div>
-                                                        <input type="text" class="form-input" x-model="question.text" placeholder="Question Label">
-                                                    </div>
-                                                    <div>
-                                                        <select class="form-select" x-model="question.type">
-                                                            <option value="text">Text</option>
-                                                            <option value="textarea">Textarea</option>
-                                                            <option value="email">Email</option>
-                                                            <option value="checkbox">Checkbox</option>
-                                                            <option value="radio">Radio</option>
-                                                            <option value="select">Select</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <div class="checkbox-group">
-                                                            <input type="checkbox" :id="'required-' + stepIndex + '-' + questionIndex" x-model="question.required">
-                                                            <label :for="'required-' + stepIndex + '-' + questionIndex">Required</label>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <button @click="removeQuestion(stepIndex, questionIndex)" class="btn-formxr btn-danger">
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                
-                                                <!-- Options for select, radio, checkbox -->
-                                                <div x-show="['select', 'radio', 'checkbox'].includes(question.type)">
-                                                    <label class="form-label">Options (one per line)</label>
-                                                    <textarea class="form-textarea" x-model="question.options_text" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    
-                                    <button @click="addQuestion(stepIndex)" class="btn-formxr btn-outline">Add Question</button>
+                                <!-- Required -->
+                                <div class="formxr-form-group">
+                                    <div class="formxr-form-check">
+                                        <input type="checkbox" 
+                                               :id="'required_' + index" 
+                                               :name="'questions[' + index + '][required]'" 
+                                               class="formxr-form-check-input" 
+                                               x-model="question.required">
+                                        <label :for="'required_' + index" class="formxr-form-check-label">
+                                            <?php _e('Required Question', 'formxr'); ?>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Options (for select, radio, checkbox) -->
+                                <div class="formxr-form-group formxr-form-group-full" 
+                                     x-show="['select', 'radio', 'checkbox'].includes(question.type)">
+                                    <label class="formxr-form-label">
+                                        <?php _e('Options', 'formxr'); ?>
+                                    </label>
+                                    <textarea :name="'questions[' + index + '][options]'" 
+                                              class="formxr-form-control" 
+                                              rows="3"
+                                              x-model="question.options"
+                                              placeholder="<?php _e('Enter one option per line...', 'formxr'); ?>"></textarea>
+                                    <p class="formxr-form-help"><?php _e('Enter each option on a new line.', 'formxr'); ?></p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </template>
 
-                <div class="formxr-step-actions">
-                    <button @click="addStep()" class="btn-formxr btn-outline">Add Another Step</button>
-                </div>
-            </div>
-
-            <!-- Step 3: Email Template -->
-            <div x-show="currentTab === 'email'">
-                <div class="form-group">
-                    <label class="form-label">Email Recipients *</label>
-                    <textarea class="form-textarea" x-model="questionnaire.email_recipients" placeholder="Enter email addresses separated by commas (e.g., admin@example.com, manager@example.com)"></textarea>
-                    <small class="formxr-help-text">Leave empty to use the default admin email</small>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Email Subject</label>
-                    <input type="text" class="form-input" x-model="questionnaire.email_subject" placeholder="New submission for {{questionnaire_title}}">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Email Template</label>
-                    <textarea class="form-textarea" x-model="questionnaire.email_template" rows="10" placeholder="Use placeholders like {{user_email}}, {{questionnaire_title}}, etc."></textarea>
-                    <small class="formxr-help-text">Leave empty to use the default template</small>
-                </div>
-
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="enable-notifications" x-model="questionnaire.notification_enabled">
-                        <label for="enable-notifications">Enable Email Notifications</label>
-                    </div>
-                </div>
-
-                <!-- Available Placeholders -->
-                <div class="conditions-section">
-                    <h3>Available Placeholders</h3>
-                    <p>You can use these placeholders in your email template:</p>
-                    
-                    <!-- System Placeholders -->
-                    <div class="placeholder-section">
-                        <h4>System Placeholders:</h4>
-                        <div class="placeholder-grid">
-                            <div class="placeholder-item">
-                                <code>{{questionnaire_title}}</code> - Questionnaire title
-                            </div>
-                            <div class="placeholder-item">
-                                <code>{{user_email}}</code> - User's email address
-                            </div>
-                            <div class="placeholder-item">
-                                <code>{{calculated_price}}</code> - Calculated price
-                            </div>
-                            <div class="placeholder-item">
-                                <code>{{submission_date}}</code> - Submission date
-                            </div>
-                            <div class="placeholder-item">
-                                <code>{{site_name}}</code> - Website name
-                            </div>
-                            <div class="placeholder-item">
-                                <code>{{site_url}}</code> - Website URL
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Dynamic Question Placeholders -->
-                    <div x-show="getQuestionPlaceholders().length > 0">
-                        <h4>Question Placeholders:</h4>
-                        <div class="placeholder-grid placeholder-grid-wide">
-                            <template x-for="placeholder in getQuestionPlaceholders()" :key="placeholder.key">
-                                <div class="placeholder-item">
-                                    <code x-text="'{{' + placeholder.key + '}}'"></code> - <span x-text="placeholder.label"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <div class="template-actions">
-                        <button @click="insertDefaultTemplate()" class="btn-formxr btn-outline">Insert Default Template</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Step 4: Add Conditions -->
-            <div x-show="currentTab === 'conditions'">
-                <div class="conditions-section">
-                    <h3>Conditional Logic</h3>
-                    <p>Add conditions to control the flow of your questionnaire.</p>
-                    
-                    <template x-for="(condition, conditionIndex) in questionnaire.conditions" :key="conditionIndex">
-                        <div class="condition-item">
-                            <div>
-                                <label class="form-label">If Question</label>
-                                <select class="form-select" x-model="condition.question_id">
-                                    <option value="">Select question...</option>
-                                    <template x-for="(step, stepIndex) in questionnaire.steps" :key="stepIndex">
-                                        <template x-for="(question, questionIndex) in step.questions" :key="questionIndex">
-                                            <option :value="stepIndex + '-' + questionIndex" x-text="'Step ' + (stepIndex + 1) + ': ' + question.text"></option>
-                                        </template>
-                                    </template>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="form-label">Equals</label>
-                                <input type="text" class="form-input" x-model="condition.value" placeholder="Value">
-                            </div>
-                            <div>
-                                <label class="form-label">Go to Step</label>
-                                <select class="form-select" x-model="condition.goto_step">
-                                    <option value="">Select step...</option>
-                                    <template x-for="(step, stepIndex) in questionnaire.steps" :key="stepIndex">
-                                        <option :value="stepIndex" x-text="'Step ' + (stepIndex + 1) + ': ' + step.title"></option>
-                                    </template>
-                                </select>
-                            </div>
-                            <div>
-                                <button @click="removeCondition(conditionIndex)" class="btn-formxr btn-danger">Remove</button>
-                            </div>
-                        </div>
-                    </template>
-                    
-                    <button @click="addCondition()" class="btn-formxr btn-outline">Add Condition</button>
+                <!-- Empty State -->
+                <div x-show="questionnaire.questions.length === 0" class="formxr-empty-state">
+                    <div class="formxr-empty-icon">❓</div>
+                    <h4><?php _e('No Questions Added', 'formxr'); ?></h4>
+                    <p><?php _e('Add your first question to get started building your questionnaire.', 'formxr'); ?></p>
+                    <button type="button" @click="addQuestion()" class="formxr-btn formxr-btn-primary">
+                        <span class="formxr-btn-icon">➕</span>
+                        <?php _e('Add First Question', 'formxr'); ?>
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Actions Bar -->
-        <div class="actions-bar">
-            <div>
-                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="btn-formxr btn-outline">Cancel</a>
-            </div>
-            <div>
-                <button @click="saveQuestionnaire()" class="btn-formxr" :disabled="saving" x-show="!questionnaire.saved">
-                    <span x-show="!saving">Finish & Save</span>
-                    <span x-show="saving">Saving...</span>
+        <!-- Save Section -->
+        <div class="formxr-section">
+            <div class="formxr-form-actions">
+                <button type="submit" name="save_questionnaire" class="formxr-btn formxr-btn-primary formxr-btn-large">
+                    <span class="formxr-btn-icon">💾</span>
+                    <?php _e('Create Questionnaire', 'formxr'); ?>
                 </button>
-                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="btn-formxr" x-show="questionnaire.saved">
-                    Back to Questionnaires
+                
+                <a href="<?php echo admin_url('admin.php?page=formxr-questionnaires'); ?>" class="formxr-btn formxr-btn-secondary formxr-btn-large">
+                    <span class="formxr-btn-icon">✖️</span>
+                    <?php _e('Cancel', 'formxr'); ?>
                 </a>
             </div>
         </div>
-    </div>
+    </form>
 </div>
+
+<script>
+function questionnaireBuilder() {
+    return {
+        questionnaire: {
+            title: '',
+            description: '',
+            price: 0,
+            status: 'active',
+            questions: []
+        },
+        
+        addQuestion() {
+            this.questionnaire.questions.push({
+                question: '',
+                type: 'text',
+                options: '',
+                required: false
+            });
+        },
+        
+        removeQuestion(index) {
+            if (confirm('<?php _e('Are you sure you want to remove this question?', 'formxr'); ?>')) {
+                this.questionnaire.questions.splice(index, 1);
+            }
+        },
+        
+        moveQuestionUp(index) {
+            if (index > 0) {
+                const question = this.questionnaire.questions.splice(index, 1)[0];
+                this.questionnaire.questions.splice(index - 1, 0, question);
+            }
+        },
+        
+        moveQuestionDown(index) {
+            if (index < this.questionnaire.questions.length - 1) {
+                const question = this.questionnaire.questions.splice(index, 1)[0];
+                this.questionnaire.questions.splice(index + 1, 0, question);
+            }
+        }
+    }
+}
+</script>
+
+<?php
+// Include footer
+include_once FORMXR_PLUGIN_DIR . 'templates/admin-footer.php';
+?>

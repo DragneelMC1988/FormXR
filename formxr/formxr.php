@@ -2,7 +2,7 @@
 /*
 Plugin Name: FormXR
 Description: Advanced questionnaire system with conditional logic, dynamic pricing, and step-based forms. Create powerful forms with drag-and-drop builder, conditional questions, and real-time pricing calculations.
-Version: 2.0
+Version: 1.0.0
 Author: Ayal Othman
 Text Domain: formxr
 Domain Path: /languages
@@ -20,7 +20,8 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('FORMXR_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('FORMXR_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('FORMXR_VERSION', '2.0');
+define('FORMXR_PLUGIN_DIR', plugin_dir_path(__FILE__)); // Alias for template compatibility
+define('FORMXR_VERSION', '1.0.0');
 
 class FormXR {
     
@@ -34,6 +35,8 @@ class FormXR {
         // Check and upgrade database if needed (run on admin pages)
         if (is_admin()) {
             add_action('admin_init', array($this, 'check_database_version'));
+            // Ensure database tables exist on any admin page load
+            add_action('admin_init', array($this, 'ensure_database_tables'));
         }
         
         // Add admin menu
@@ -67,11 +70,13 @@ class FormXR {
     
     public function activate() {
         $this->create_submissions_table();
+        $this->upgrade_database_to_2_0();
+        $this->upgrade_database_to_2_1();
         $this->set_default_settings();
         
         // Set initial database version
         if (!get_option('formxr_db_version')) {
-            update_option('formxr_db_version', '2.0');
+            update_option('formxr_db_version', '2.1');
         }
         
         flush_rewrite_rules();
@@ -89,15 +94,42 @@ class FormXR {
         
         if (version_compare($current_version, '2.0', '<')) {
             $this->upgrade_database_to_2_0();
-            update_option('formxr_db_version', '2.0');
+        }
+        
+        if (version_compare($current_version, '2.1', '<')) {
+            $this->upgrade_database_to_2_1();
+            update_option('formxr_db_version', '2.1');
+        }
+    }
+    
+    public function ensure_database_tables() {
+        global $wpdb;
+        
+        // Check if core tables exist, if not create them
+        $steps_table = $wpdb->prefix . 'formxr_steps';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$steps_table'") == $steps_table;
+        
+        if (!$table_exists) {
+            // Tables don't exist, create them
+            $this->create_submissions_table();
+            $this->upgrade_database_to_2_0();
         }
     }
     
     private function upgrade_database_to_2_0() {
         global $wpdb;
         
-        // Check if steps table exists and has description column
+        // Check if steps table exists first
         $steps_table = $wpdb->prefix . 'formxr_steps';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$steps_table'") == $steps_table;
+        
+        if (!$table_exists) {
+            // Create all tables if they don't exist
+            $this->create_submissions_table();
+            return;
+        }
+        
+        // Check if steps table exists and has description column
         $column_exists = $wpdb->get_results("SHOW COLUMNS FROM `$steps_table` LIKE 'description'");
         
         if (empty($column_exists)) {
@@ -205,6 +237,38 @@ class FormXR {
         dbDelta($sql_submissions);
     }
     
+    private function upgrade_database_to_2_1() {
+        global $wpdb;
+        
+        $questionnaires_table = $wpdb->prefix . 'formxr_questionnaires';
+        
+        // Check if new email template columns exist
+        $admin_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_template'");
+        $user_email_template_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_template'");
+        $admin_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'admin_email_subject'");
+        $user_email_subject_exists = $wpdb->get_results("SHOW COLUMNS FROM `$questionnaires_table` LIKE 'user_email_subject'");
+        
+        // Add admin email template column
+        if (empty($admin_email_template_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `admin_email_template` TEXT AFTER `email_template`");
+        }
+        
+        // Add user email template column
+        if (empty($user_email_template_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `user_email_template` TEXT AFTER `admin_email_template`");
+        }
+        
+        // Add admin email subject column
+        if (empty($admin_email_subject_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `admin_email_subject` VARCHAR(255) AFTER `user_email_template`");
+        }
+        
+        // Add user email subject column
+        if (empty($user_email_subject_exists)) {
+            $wpdb->query("ALTER TABLE `$questionnaires_table` ADD COLUMN `user_email_subject` VARCHAR(255) AFTER `admin_email_subject`");
+        }
+    }
+    
     private function set_default_settings() {
         add_option('formxr_email_method', 'wp_mail');
         add_option('formxr_smtp_host', '');
@@ -288,6 +352,9 @@ class FormXR {
                 case 'new':
                     $this->render_admin_page('admin-questionnaire-new');
                     return;
+                case 'wizard':
+                    $this->render_admin_page('admin-questionnaire-wizard');
+                    return;
                 case 'edit':
                     $this->render_admin_page('admin-questionnaire-edit');
                     return;
@@ -312,24 +379,11 @@ class FormXR {
     }
     
     /**
-     * Render admin page with header and footer
+     * Render admin page template directly
      */
     private function render_admin_page($template) {
-        ?>
-        <div class="formxr-admin-page">
-            <div class="formxr-admin-wrapper">
-                <?php include FORMXR_PLUGIN_PATH . 'templates/admin-header.php'; ?>
-                
-                <div class="formxr-admin-content">
-                    <?php include FORMXR_PLUGIN_PATH . 'templates/' . $template . '.php'; ?>
-                </div>
-                
-                <?php include FORMXR_PLUGIN_PATH . 'templates/admin-footer.php'; ?>
-            </div>
-        </div>
-        <?php
-    }
-        include FORMXR_PLUGIN_PATH . 'templates/admin-analytics.php';
+        // Simply include the template - templates handle their own header/footer
+        include FORMXR_PLUGIN_PATH . 'templates/' . $template . '.php';
     }
     
     public function enqueue_frontend_scripts() {
@@ -351,23 +405,26 @@ class FormXR {
     
     public function enqueue_admin_scripts($hook) {
         if (strpos($hook, 'formxr') !== false) {
+            // Force clear cache by adding timestamp
+            $version = FORMXR_VERSION . '.' . time();
+            
             // Enqueue improved admin styles (in order)
-            wp_enqueue_style('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/css/admin-core.css', array(), FORMXR_VERSION);
-            wp_enqueue_style('formxr-admin-components', FORMXR_PLUGIN_URL . 'assets/css/admin-components.css', array('formxr-admin-core'), FORMXR_VERSION);
-            wp_enqueue_style('formxr-admin', FORMXR_PLUGIN_URL . 'assets/css/admin.css', array('formxr-admin-components'), FORMXR_VERSION);
+            wp_enqueue_style('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/css/admin-core.css', array(), $version);
+            wp_enqueue_style('formxr-admin-components', FORMXR_PLUGIN_URL . 'assets/css/admin-components.css', array('formxr-admin-core'), $version);
             
             // Enqueue improved admin scripts
-            wp_enqueue_script('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery', 'jquery-ui-sortable'), FORMXR_VERSION, true);
-            wp_enqueue_script('formxr-admin', FORMXR_PLUGIN_URL . 'assets/js/admin.js', array('formxr-admin-core'), FORMXR_VERSION, true);
-            wp_enqueue_script('formxr-questionnaire-builder', FORMXR_PLUGIN_URL . 'assets/js/questionnaire-builder.js', array('formxr-admin-core'), FORMXR_VERSION, true);
+            wp_enqueue_script('formxr-admin-core', FORMXR_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery', 'jquery-ui-sortable'), $version, true);
+            wp_enqueue_script('formxr-admin', FORMXR_PLUGIN_URL . 'assets/js/admin.js', array('formxr-admin-core'), $version, true);
+            wp_enqueue_script('formxr-questionnaire-builder', FORMXR_PLUGIN_URL . 'assets/js/questionnaire-builder.js', array('formxr-admin-core'), $version, true);
             
             // Add Alpine.js for reactive UI in admin
             wp_enqueue_script('alpinejs', 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js', array(), '3.0.0', true);
             wp_script_add_data('alpinejs', 'defer', true);
             
-            wp_localize_script('formxr-admin-core', 'formxr_admin', array(
+            wp_localize_script('formxr-admin-core', 'formxr_admin_ajax', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('formxr_admin_nonce'),
+                'questionnaires_url' => admin_url('admin.php?page=formxr-questionnaires'),
                 'strings' => array(
                     'confirm_delete' => __('Are you sure you want to delete this questionnaire?', 'formxr'),
                     'saving' => __('Saving...', 'formxr'),

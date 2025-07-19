@@ -1,6 +1,7 @@
 /**
- * FormXR Frontend Styles
- * Styles for the frontend form display
+ * FormXR Frontend Styles - New Color Scheme
+ * Colors: #2AACE2, #8062AA, #E4E9EC, #0D152C, #4555A5, #13BCD4, #F36E24, #EF4681
+ * No border radius
  */
 
 /* ================================
@@ -8,13 +9,39 @@
 ================================ */
 
 :root {
-    --formxr-frontend-primary: #0066ff;
-    --formxr-frontend-secondary: #6c757d;
-    --formxr-frontend-success: #28a745;
-    --formxr-frontend-danger: #dc3545;
-    --formxr-frontend-warning: #ffc107;
-    --formxr-frontend-light: #f8f9fa;
-    --formxr-frontend-dark: #343a40;
+    /* Primary Colors */
+    --formxr-frontend-primary: #2AACE2;
+    --formxr-frontend-primary-light: #4FC3E8;
+    --formxr-frontend-primary-dark: #1B8DB5;
+    
+    /* Secondary Colors */
+    --formxr-frontend-secondary: #8062AA;
+    --formxr-frontend-secondary-light: #9A7CBB;
+    --formxr-frontend-secondary-dark: #664D88;
+    
+    /* Accent Colors */
+    --formxr-frontend-accent-1: #4555A5;
+    --formxr-frontend-accent-2: #13BCD4;
+    --formxr-frontend-accent-3: #F36E24;
+    --formxr-frontend-accent-4: #EF4681;
+    
+    /* Neutral Colors */
+    --formxr-frontend-light: #E4E9EC;
+    --formxr-frontend-dark: #0D152C;
+    --formxr-frontend-gray: #6B7280;
+    --formxr-frontend-border: #D1D5DB;
+    --formxr-frontend-bg-light: #F9FAFB;
+    
+    /* Text Colors */
+    --formxr-frontend-text-dark: #0D152C;
+    --formxr-frontend-text-light: #6B7280;
+    --formxr-frontend-text-white: #FFFFFF;
+    
+    /* Status Colors */
+    --formxr-frontend-success: #10B981;
+    --formxr-frontend-warning: #F59E0B;
+    --formxr-frontend-error: #EF4444;
+    --formxr-frontend-info: #3B82F6;
 }
 
 /* ================================
@@ -22,34 +49,348 @@
 ================================ */
 
 .formxr-form-container {
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
-    padding: 2rem;
-    background: #ffffff;
-    border-radius: 1rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 0;
+    background: var(--formxr-frontend-text-white);
+    border-radius: 0;
+    box-shadow: 0 8px 32px rgba(13, 21, 44, 0.15);
+    border: 2px solid var(--formxr-frontend-border);
+    overflow: hidden;
 }
 
 .formxr-form-header {
+    background: var(--formxr-frontend-primary);
+    color: var(--formxr-frontend-text-white);
+    padding: 2rem;
     text-align: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid var(--formxr-frontend-light);
+    position: relative;
+}
+
+.formxr-form-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--formxr-frontend-primary-dark);
 }
 
 .formxr-form-title {
     font-size: 2rem;
-    font-weight: 700;
-    color: var(--formxr-frontend-dark);
-    margin: 0 0 0.5rem 0;
+    font-weight: 900;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .formxr-form-description {
-    font-size: 1.1rem;
-    color: var(--formxr-frontend-secondary);
+    font-size: 1.125rem;
+    margin: 1rem 0 0 0;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+.formxr-form-body {
+    padding: 2.5rem;
+}
+
+/* ================================
+   STEP NAVIGATION
+================================ */
+
+.formxr-step-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 3rem;
+    padding: 1.5rem;
+    background: var(--formxr-frontend-light);
+    border-bottom: 2px solid var(--formxr-frontend-border);
+}
+
+.formxr-step-indicator {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.formxr-step-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.formxr-step-number {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0;
+    background: var(--formxr-frontend-border);
+    color: var(--formxr-frontend-text-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    border: 2px solid var(--formxr-frontend-border);
+    transition: all 0.3s ease;
+}
+
+.formxr-step-item.active .formxr-step-number {
+    background: var(--formxr-frontend-primary);
+    color: var(--formxr-frontend-text-white);
+    border-color: var(--formxr-frontend-primary);
+    transform: scale(1.1);
+}
+
+.formxr-step-item.completed .formxr-step-number {
+    background: var(--formxr-frontend-success);
+    color: var(--formxr-frontend-text-white);
+    border-color: var(--formxr-frontend-success);
+}
+
+.formxr-step-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--formxr-frontend-text-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.formxr-step-separator {
+    width: 3rem;
+    height: 2px;
+    background: var(--formxr-frontend-border);
+    margin: 0 1rem;
+}
+
+.formxr-step-item.completed + .formxr-step-separator {
+    background: var(--formxr-frontend-success);
+}
+
+/* ================================
+   FORM FIELDS
+================================ */
+
+.formxr-form-step {
+    margin-bottom: 2rem;
+}
+
+.formxr-step-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--formxr-frontend-border);
+}
+
+.formxr-step-title-main {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--formxr-frontend-text-dark);
+    margin: 0 0 0.5rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.formxr-step-description {
+    font-size: 1rem;
+    color: var(--formxr-frontend-text-light);
     margin: 0;
     line-height: 1.6;
+}
+
+.formxr-question-group {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--formxr-frontend-bg-light);
+    border: 2px solid var(--formxr-frontend-border);
+    border-radius: 0;
+    transition: all 0.3s ease;
+}
+
+.formxr-question-group:hover {
+    border-color: var(--formxr-frontend-primary);
+    background: var(--formxr-frontend-text-white);
+}
+
+.formxr-question-group:focus-within {
+    border-color: var(--formxr-frontend-primary);
+    background: var(--formxr-frontend-text-white);
+    box-shadow: 0 0 0 3px rgba(42, 172, 226, 0.1);
+}
+
+.formxr-question-label {
+    display: block;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--formxr-frontend-text-dark);
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.formxr-question-required {
+    color: var(--formxr-frontend-error);
+    margin-left: 0.25rem;
+}
+
+.formxr-question-input {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1rem;
+    border: 2px solid var(--formxr-frontend-border);
+    border-radius: 0;
+    background: var(--formxr-frontend-text-white);
+    color: var(--formxr-frontend-text-dark);
+    transition: all 0.3s ease;
+    font-family: inherit;
+}
+
+.formxr-question-input:focus {
+    outline: 0;
+    border-color: var(--formxr-frontend-primary);
+    box-shadow: 0 0 0 3px rgba(42, 172, 226, 0.1);
+}
+
+.formxr-question-input:hover {
+    border-color: var(--formxr-frontend-primary-light);
+}
+
+.formxr-question-input::placeholder {
+    color: var(--formxr-frontend-text-light);
+    opacity: 0.7;
+}
+
+textarea.formxr-question-input {
+    resize: vertical;
+    min-height: 120px;
+    font-family: inherit;
+}
+
+select.formxr-question-input {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 3rem;
+}
+
+/* Radio and Checkbox Groups */
+.formxr-radio-group,
+.formxr-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.formxr-radio-item,
+.formxr-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 2px solid var(--formxr-frontend-border);
+    border-radius: 0;
+    background: var(--formxr-frontend-text-white);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.formxr-radio-item:hover,
+.formxr-checkbox-item:hover {
+    border-color: var(--formxr-frontend-primary);
+    background: var(--formxr-frontend-light);
+}
+
+.formxr-radio-item input[type="radio"],
+.formxr-checkbox-item input[type="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--formxr-frontend-primary);
+    cursor: pointer;
+}
+
+.formxr-radio-item label,
+.formxr-checkbox-item label {
+    flex: 1;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--formxr-frontend-text-dark);
+}
+
+/* ================================
+   FORM ACTIONS
+================================ */
+
+.formxr-form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 3rem;
+    padding: 2rem;
+    background: var(--formxr-frontend-light);
+    border-top: 2px solid var(--formxr-frontend-border);
+}
+
+.formxr-btn-frontend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 0;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    min-width: 120px;
+}
+
+.formxr-btn-frontend:focus {
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(42, 172, 226, 0.3);
+}
+
+.formxr-btn-frontend:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.formxr-btn-frontend-primary {
+    color: var(--formxr-frontend-text-white);
+    background: var(--formxr-frontend-primary);
+    border-color: var(--formxr-frontend-primary);
+}
+
+.formxr-btn-frontend-primary:hover:not(:disabled) {
+    background: var(--formxr-frontend-primary-dark);
+    border-color: var(--formxr-frontend-primary-dark);
+    color: var(--formxr-frontend-text-white);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(42, 172, 226, 0.3);
+}
+
+.formxr-btn-frontend-secondary {
+    color: var(--formxr-frontend-text-dark);
+    background: var(--formxr-frontend-text-white);
+    border-color: var(--formxr-frontend-border);
+}
+
+.formxr-btn-frontend-secondary:hover:not(:disabled) {
+    background: var(--formxr-frontend-light);
+    border-color: var(--formxr-frontend-primary);
+    color: var(--formxr-frontend-text-dark);
+}
+
+.formxr-btn-frontend-success {
+    color: var(--formxr-frontend-text-white);
+    background: var(--formxr-frontend-success);
+    border-color: var(--formxr-frontend-success);
 }
 
 /* ================================
@@ -60,356 +401,104 @@
     margin-bottom: 2rem;
 }
 
-.formxr-progress-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.formxr-step-counter {
-    font-weight: 600;
-    color: var(--formxr-frontend-primary);
-}
-
-.formxr-progress-percentage {
-    font-size: 0.9rem;
-    color: var(--formxr-frontend-secondary);
-}
-
 .formxr-progress-bar-container {
+    width: 100%;
     height: 8px;
-    background: var(--formxr-frontend-light);
-    border-radius: 4px;
+    background: var(--formxr-frontend-border);
+    border-radius: 0;
     overflow: hidden;
+    border: 1px solid var(--formxr-frontend-border);
 }
 
 .formxr-progress-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--formxr-frontend-primary), #4d94ff);
-    transition: width 0.3s ease;
-    border-radius: 4px;
+    background: linear-gradient(90deg, var(--formxr-frontend-primary), var(--formxr-frontend-secondary));
+    transition: width 0.5s ease;
+    border-radius: 0;
 }
 
-/* ================================
-   FORM STEPS
-================================ */
-
-.formxr-form-steps {
-    position: relative;
-}
-
-.formxr-step {
-    display: none;
-    animation: fadeIn 0.3s ease-in-out;
-}
-
-.formxr-step.active {
-    display: block;
-}
-
-.formxr-step-header {
-    margin-bottom: 1.5rem;
+.formxr-progress-text {
     text-align: center;
-}
-
-.formxr-step-title {
-    font-size: 1.5rem;
+    font-size: 0.875rem;
     font-weight: 600;
-    color: var(--formxr-frontend-dark);
-    margin: 0 0 0.5rem 0;
-}
-
-.formxr-step-description {
-    color: var(--formxr-frontend-secondary);
-    margin: 0;
-    line-height: 1.5;
-}
-
-/* ================================
-   QUESTIONS
-================================ */
-
-.formxr-question {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: #fafbfc;
-    border-radius: 0.75rem;
-    border: 1px solid #e9ecef;
-}
-
-.formxr-question-text {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--formxr-frontend-dark);
-    margin: 0 0 1rem 0;
-    line-height: 1.4;
-}
-
-.formxr-question-required {
-    color: var(--formxr-frontend-danger);
-}
-
-/* ================================
-   FORM CONTROLS
-================================ */
-
-.formxr-input,
-.formxr-textarea,
-.formxr-select {
-    width: 100%;
-    padding: 0.75rem;
-    font-size: 1rem;
-    border: 2px solid #e9ecef;
-    border-radius: 0.5rem;
-    background: #ffffff;
-    transition: all 0.2s ease;
-    font-family: inherit;
-}
-
-.formxr-input:focus,
-.formxr-textarea:focus,
-.formxr-select:focus {
-    outline: none;
-    border-color: var(--formxr-frontend-primary);
-    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
-}
-
-.formxr-textarea {
-    min-height: 100px;
-    resize: vertical;
-}
-
-/* ================================
-   RADIO AND CHECKBOX OPTIONS
-================================ */
-
-.formxr-options {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.formxr-option {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem;
-    background: #ffffff;
-    border: 2px solid #e9ecef;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.formxr-option:hover {
-    border-color: var(--formxr-frontend-primary);
-    background: #f8f9ff;
-}
-
-.formxr-option.selected {
-    border-color: var(--formxr-frontend-primary);
-    background: #f8f9ff;
-}
-
-.formxr-option-input {
-    margin-right: 0.75rem;
-    accent-color: var(--formxr-frontend-primary);
-}
-
-.formxr-option-label {
-    flex: 1;
-    font-weight: 500;
-    color: var(--formxr-frontend-dark);
-    cursor: pointer;
-}
-
-/* ================================
-   RANGE SLIDER
-================================ */
-
-.formxr-range-container {
-    margin: 1rem 0;
-}
-
-.formxr-range {
-    width: 100%;
-    height: 6px;
-    border-radius: 3px;
-    background: #e9ecef;
-    outline: none;
-    -webkit-appearance: none;
-}
-
-.formxr-range::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--formxr-frontend-primary);
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.formxr-range::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--formxr-frontend-primary);
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.formxr-range-value {
-    text-align: center;
+    color: var(--formxr-frontend-text-light);
     margin-top: 0.5rem;
-    font-weight: 600;
-    color: var(--formxr-frontend-primary);
-    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
 }
 
 /* ================================
-   PRICE DISPLAY
+   VALIDATION & MESSAGES
 ================================ */
 
-.formxr-price-display {
-    background: linear-gradient(135deg, var(--formxr-frontend-primary), #4d94ff);
-    color: white;
-    padding: 1.5rem;
-    border-radius: 0.75rem;
-    text-align: center;
-    margin: 2rem 0;
-    box-shadow: 0 4px 12px rgba(0, 102, 255, 0.3);
-}
-
-.formxr-price-label {
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-    opacity: 0.9;
-}
-
-.formxr-price-amount {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0;
-}
-
-.formxr-price-period {
-    font-size: 0.9rem;
-    opacity: 0.9;
-    margin-top: 0.25rem;
-}
-
-/* ================================
-   NAVIGATION BUTTONS
-================================ */
-
-.formxr-navigation {
+.formxr-error-message {
+    color: var(--formxr-frontend-error);
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-top: 0.5rem;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid #e9ecef;
-}
-
-.formxr-btn {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.formxr-btn-primary {
-    background: var(--formxr-frontend-primary);
-    color: white;
-}
-
-.formxr-btn-primary:hover {
-    background: #0052cc;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 102, 255, 0.3);
-}
-
-.formxr-btn-secondary {
-    background: var(--formxr-frontend-secondary);
-    color: white;
-}
-
-.formxr-btn-secondary:hover {
-    background: #5a6268;
-    transform: translateY(-1px);
-}
-
-.formxr-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-/* ================================
-   FINAL STEP
-================================ */
-
-.formxr-final-step {
-    text-align: center;
-    padding: 2rem;
-}
-
-.formxr-success-icon {
-    font-size: 4rem;
-    color: var(--formxr-frontend-success);
-    margin-bottom: 1rem;
-}
-
-.formxr-success-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--formxr-frontend-dark);
-    margin: 0 0 0.5rem 0;
+    gap: 0.25rem;
 }
 
 .formxr-success-message {
-    color: var(--formxr-frontend-secondary);
-    margin: 0 0 2rem 0;
-    line-height: 1.6;
+    background: #f0fdf4;
+    border: 2px solid var(--formxr-frontend-success);
+    color: #166534;
+    padding: 1.5rem;
+    border-radius: 0;
+    margin: 1.5rem 0;
+    font-weight: 500;
+    text-align: center;
+}
+
+.formxr-error-alert {
+    background: #fef2f2;
+    border: 2px solid var(--formxr-frontend-error);
+    color: #991b1b;
+    padding: 1.5rem;
+    border-radius: 0;
+    margin: 1.5rem 0;
+    font-weight: 500;
+}
+
+.formxr-question-input.error {
+    border-color: var(--formxr-frontend-error);
+}
+
+.formxr-question-input.error:focus {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
 /* ================================
-   LOADING STATE
+   LOADING STATES
 ================================ */
 
-.formxr-loading {
-    text-align: center;
-    padding: 2rem;
+.formxr-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(13, 21, 44, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
 }
 
-.formxr-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
+.formxr-loading-spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid var(--formxr-frontend-border);
     border-top: 4px solid var(--formxr-frontend-primary);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem auto;
+    animation: formxr-spin 1s linear infinite;
 }
 
-@keyframes spin {
+@keyframes formxr-spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ================================
@@ -418,25 +507,75 @@
 
 @media (max-width: 768px) {
     .formxr-form-container {
-        padding: 1rem;
         margin: 1rem;
+        box-shadow: 0 4px 16px rgba(13, 21, 44, 0.1);
+    }
+    
+    .formxr-form-header,
+    .formxr-form-body,
+    .formxr-form-actions {
+        padding: 1.5rem;
     }
     
     .formxr-form-title {
         font-size: 1.5rem;
     }
     
-    .formxr-question {
+    .formxr-step-nav {
         padding: 1rem;
     }
     
-    .formxr-navigation {
+    .formxr-step-indicator {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .formxr-step-separator {
+        width: 2rem;
+        margin: 0 0.5rem;
+    }
+    
+    .formxr-form-actions {
         flex-direction: column;
         gap: 1rem;
     }
     
-    .formxr-btn {
+    .formxr-btn-frontend {
         width: 100%;
         justify-content: center;
+    }
+    
+    .formxr-question-group {
+        padding: 1rem;
+    }
+    
+    .formxr-radio-group,
+    .formxr-checkbox-group {
+        gap: 0.5rem;
+    }
+    
+    .formxr-step-title-main {
+        font-size: 1.25rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .formxr-form-container {
+        margin: 0.5rem;
+    }
+    
+    .formxr-form-title {
+        font-size: 1.25rem;
+    }
+    
+    .formxr-step-number {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.875rem;
+    }
+    
+    .formxr-btn-frontend {
+        padding: 0.75rem 1.5rem;
+        font-size: 0.875rem;
     }
 }
